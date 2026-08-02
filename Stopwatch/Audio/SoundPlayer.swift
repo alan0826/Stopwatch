@@ -4,10 +4,9 @@
 //
 
 import AVFoundation
-import AudioToolbox
 import Foundation
 
-/// 負責播放鈴聲。
+/// 負責在前景播放鈴聲。
 final class SoundPlayer: NSObject, AVAudioPlayerDelegate {
 
     static let shared = SoundPlayer()
@@ -42,19 +41,11 @@ final class SoundPlayer: NSObject, AVAudioPlayerDelegate {
     // MARK: - 播放
 
     func play(_ option: SoundOption, times: Int = 1) {
-        let repeatCount = max(times, 1)
-
-        switch option.source {
-        case .bundled(let name, let ext):
-            activateSession()
-            guard let player = player(for: option.id, name: name, ext: ext) else { return }
-            player.numberOfLoops = repeatCount - 1
-            player.currentTime = 0
-            player.play()
-
-        case .systemID(let soundID):
-            playSystemSound(soundID, remaining: repeatCount)
-        }
+        activateSession()
+        guard let player = player(for: option) else { return }
+        player.numberOfLoops = max(times, 1) - 1
+        player.currentTime = 0
+        player.play()
     }
 
     /// 試聽（永遠只響一聲）。
@@ -69,22 +60,13 @@ final class SoundPlayer: NSObject, AVAudioPlayerDelegate {
         deactivateSession()
     }
 
-    private func player(for id: String, name: String, ext: String) -> AVAudioPlayer? {
-        if let cached = players[id] { return cached }
-        guard let url = Bundle.main.url(forResource: name, withExtension: ext),
+    private func player(for option: SoundOption) -> AVAudioPlayer? {
+        if let cached = players[option.id] { return cached }
+        guard let url = Bundle.main.url(forResource: option.id, withExtension: option.fileExtension),
               let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
         player.delegate = self
         player.prepareToPlay()
-        players[id] = player
+        players[option.id] = player
         return player
-    }
-
-    private func playSystemSound(_ soundID: SystemSoundID, remaining: Int) {
-        guard remaining > 0 else { return }
-        AudioServicesPlaySystemSoundWithCompletion(soundID) {
-            DispatchQueue.main.async {
-                SoundPlayer.shared.playSystemSound(soundID, remaining: remaining - 1)
-            }
-        }
     }
 }

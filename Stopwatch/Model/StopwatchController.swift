@@ -367,7 +367,8 @@ final class StopwatchController {
     // MARK: - 本地通知
 
     func requestNotificationPermissionIfNeeded() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] _, _ in
+        // 不要 .badge：App 從來不設角標，多要一個權限只會讓授權對話框看起來更可疑。
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] _, _ in
             self?.refreshNotificationStatus()
         }
     }
@@ -408,7 +409,6 @@ final class StopwatchController {
         upcoming.sort { $0.time < $1.time }
         let batch = Array(upcoming.prefix(maxScheduledNotifications))
 
-        // 只換掉自己的通知，鬧鐘與計時器排的不受影響。
         UNUserNotificationCenter.current().replacePending(withPrefix: NotificationID.reminder) {
             batch.compactMap { item in
                 let delay = item.time - now
