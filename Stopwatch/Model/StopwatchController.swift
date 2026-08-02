@@ -62,17 +62,48 @@ final class StopwatchController {
 
     private enum Keys {
         static let schedules = "schedules.v1"
+        static let runState = "stopwatch.run.v1"
     }
+
+    /// 存檔用的碼表狀態，App 被系統終止之後可以接回原本的時間軸。
+    private struct RunState: Codable {
+        var isRunning: Bool
+        var accumulated: TimeInterval
+        var startedAt: Date?
+    }
+
+    /// 超過這個長度就當作是上次忘了停，重新歸零而不是接一個天文數字回來。
+    private static let maxRestorableElapsed: TimeInterval = 24 * 60 * 60
 
     private var ticker: Timer?
     private var lastCheckedElapsed: TimeInterval = 0
     private var flashResetWorkItem: DispatchWorkItem?
+    private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+
+    /// 下一次 tick 是不是「從背景回來的補算」。背景期間的提醒已經由通知響過，
+    /// 補算時只補登紀錄、不再出聲。
+    private var isCatchingUp = false
 
     /// 本地通知一次最多只會保留 64 則，這裡預留一些空間。
     private let maxScheduledNotifications = 58
 
     init() {
         schedules = Self.loadSchedules()
+        restoreRunState()
+    }
+
+    /// App 啟動時呼叫。
+    func handleLaunch() {
+        // 上一輪排進系統的提醒通知已經沒有意義：前景一律由 App 自己響，
+        // 再次進背景時會重排。不清掉的話 App 被系統終止過就會冒出對不上的提醒。
+        cancelPendingNotifications()
+        refreshNotificationStatus()
+        requestNotificationPermissionIfNeeded()
+
+        if isRunning {
+            startTicker()
+            applyIdleTimer()
+        }
     }
 
     // MARK: - 碼表控制
@@ -90,6 +121,7 @@ final class StopwatchController {
 
         startTicker()
         applyIdleTimer()
+        persistRunState()
     }
 
     func pause() {
@@ -102,6 +134,7 @@ final class StopwatchController {
         stopTicker()
         cancelPendingNotifications()
         applyIdleTimer()
+        persistRunState()
     }
 
     func reset() {
@@ -117,6 +150,37 @@ final class StopwatchController {
         SoundPlayer.shared.stopAll()
         cancelPendingNotifications()
         applyIdleTimer()
+        persistRunState()
+    }
+
+    // MARK: - 碼表狀態存檔
+
+    private func persistRunState() {
+        let state = RunState(isRunning: isRunning, accumulated: accumulated, startedAt: startedAt)
+        guard let data = try? JSONEncoder().encode(state) else { return }
+        UserDefaults.standard.set(data, forKey: Keys.runState)
+    }
+
+    /// 只還原資料，計時器與螢幕鎖定留給 `handleLaunch()`，避免在 App 還沒啟動完就碰 `UIApplication`。
+    private func restoreRunState() {
+        guard let data = UserDefaults.standard.data(forKey: Keys.runState),
+              let state = try? JSONDecoder().decode(RunState.self, from: data) else { return }
+
+        accumulated = max(state.accumulated, 0)
+        startedAt = state.isRunning ? state.startedAt : nil
+        isRunning = state.isRunning && state.startedAt != nil
+        displayNow = Date()
+
+        guard preciseElapsed <= Self.maxRestorableElapsed else {
+            accumulated = 0
+            startedAt = nil
+            isRunning = false
+            persistRunState()
+            return
+        }
+
+        // 紀錄本身沒有存檔，冷啟動時就不補登背景期間響過的提醒，只把時間軸接回來。
+        lastCheckedElapsed = preciseElapsed
     }
 
     // MARK: - 計時器
@@ -142,13 +206,14 @@ final class StopwatchController {
         guard isRunning else { return }
 
         let now = preciseElapsed
-        fireDueAlarms(from: lastCheckedElapsed, to: now)
+        fireDueAlarms(from: lastCheckedElapsed, to: now, catchingUp: isCatchingUp)
         lastCheckedElapsed = now
+        isCatchingUp = false
     }
 
     // MARK: - 響鈴
 
-    private func fireDueAlarms(from: TimeInterval, to now: TimeInterval) {
+    private func fireDueAlarms(from: TimeInterval, to now: TimeInterval, catchingUp: Bool) {
         guard now > from else { return }
 
         var due: [(schedule: AlarmSchedule, time: TimeInterval)] = []
@@ -161,10 +226,11 @@ final class StopwatchController {
         due.sort { $0.time < $1.time }
 
         for item in due {
-            // 落後超過 1.5 秒代表 App 剛剛在背景（聲音已由通知送出），這裡只補登紀錄。
-            let missed = (now - item.time) > 1.5
-            record(item.schedule, at: item.time, missed: missed)
-            if !missed {
+            // 只有「剛從背景回來、而且這個時間點確實已經過去」才算是通知響過的，
+            // 這裡不能單看落後多少秒：前景偶爾卡頓也會落後，那時候該響的還是要響。
+            let deliveredByNotification = catchingUp && (now - item.time) > 0.5
+            record(item.schedule, at: item.time, missed: deliveredByNotification)
+            if !deliveredByNotification {
                 ring(item.schedule, at: item.time)
             }
         }
@@ -287,7 +353,9 @@ final class StopwatchController {
             cancelPendingNotifications()
             refreshNotificationStatus()
             if isRunning { tick() }   // 補登在背景期間響過的提醒
+            isCatchingUp = false
         case .background:
+            isCatchingUp = true
             if isRunning {
                 scheduleBackgroundNotifications()
             }
@@ -312,8 +380,24 @@ final class StopwatchController {
         }
     }
 
+    /// 排通知是非同步的，進背景後主佇列很快就被凍結。
+    /// 用背景任務把時間撐到整批排完為止，否則會整段背景都不響。
+    private func beginBackgroundTask() {
+        endBackgroundTask()
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "schedule-reminders") { [weak self] in
+            self?.endBackgroundTask()
+        }
+    }
+
+    private func endBackgroundTask() {
+        guard backgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTask)
+        backgroundTask = .invalid
+    }
+
     /// 進背景時，把接下來的響鈴時間點排成本地通知（iOS 上限 64 則）。
     private func scheduleBackgroundNotifications() {
+        beginBackgroundTask()
         let now = preciseElapsed
         var upcoming: [(schedule: AlarmSchedule, time: TimeInterval)] = []
         for schedule in schedules where schedule.isEnabled {
@@ -342,6 +426,8 @@ final class StopwatchController {
                     trigger: UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)
                 )
             }
+        } completion: { [weak self] in
+            self?.endBackgroundTask()
         }
     }
 

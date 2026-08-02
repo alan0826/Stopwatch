@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  尚未接上 build settings。免費的 Personal Team 無法啟用 Time Sensitive
+  Notifications，接上去會讓實機建置失敗（描述檔不含這個 capability）。
+
+  等加入付費的 Apple Developer Program 之後：
+  Target → Signing & Capabilities → ＋ Capability → Time Sensitive Notifications，
+  Xcode 會自動把 CODE_SIGN_ENTITLEMENTS 指回這個檔案。
+
+  在那之前，程式碼裡的 interruptionLevel = .timeSensitive 會被系統降級成
+  一般通知處理（不會出錯，只是專注模式下不會突破）。
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
+</dict>
+</plist>

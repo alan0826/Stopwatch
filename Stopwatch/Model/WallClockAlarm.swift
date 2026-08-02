@@ -17,7 +17,18 @@ struct WallClockAlarm: Identifiable, Codable, Hashable {
     var snoozeEnabled = true
     var isEnabled = true
 
+    /// 不重複的鬧鐘預定響鈴的時刻。響過之後就把鬧鐘關掉，與系統鬧鐘一致；
+    /// 重複的鬧鐘為 `nil`。
+    var oneTimeFireDate: Date?
+
     static let weekdayNames = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"]
+
+    /// `date` 之後最近一次符合這個時刻的日期。
+    func nextOccurrence(after date: Date) -> Date? {
+        Calendar.current.nextDate(after: date,
+                                  matching: DateComponents(hour: hour, minute: minute),
+                                  matchingPolicy: .nextTime)
+    }
 
     /// 只帶時間的 `Date`，給 `DatePicker` 使用。
     var time: Date {

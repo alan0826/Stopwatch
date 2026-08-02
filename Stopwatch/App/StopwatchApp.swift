@@ -24,9 +24,8 @@ struct StopwatchApp: App {
                 .environment(lapStopwatch)
                 .environment(countdownTimer)
                 .task {
-                    controller.refreshNotificationStatus()
-                    controller.requestNotificationPermissionIfNeeded()
-                    alarmStore.reschedule()
+                    controller.handleLaunch()
+                    alarmStore.refresh()
                 }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -34,6 +33,7 @@ struct StopwatchApp: App {
             if phase == .active {
                 lapStopwatch.refresh()
                 countdownTimer.refresh()
+                alarmStore.refresh()
             }
         }
     }
@@ -69,7 +69,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         if response.actionIdentifier == NotificationID.snoozeAction,
            let content = response.notification.request.content.mutableCopy() as? UNMutableNotificationContent {
             let request = UNNotificationRequest(
-                identifier: "\(NotificationID.alarm)snooze-\(UUID().uuidString)",
+                identifier: "\(NotificationID.snooze)\(UUID().uuidString)",
                 content: content,
                 trigger: UNTimeIntervalNotificationTrigger(timeInterval: NotificationID.snoozeInterval,
                                                            repeats: false)

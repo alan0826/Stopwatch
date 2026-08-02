@@ -8,13 +8,13 @@ import AudioToolbox
 import Foundation
 
 /// 負責播放鈴聲。
-final class SoundPlayer {
+final class SoundPlayer: NSObject, AVAudioPlayerDelegate {
 
     static let shared = SoundPlayer()
 
     private var players: [String: AVAudioPlayer] = [:]
 
-    private init() {}
+    private override init() {}
 
     // MARK: - 音訊工作階段
 
@@ -27,6 +27,16 @@ final class SoundPlayer {
 
     private func deactivateSession() {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    /// 鈴聲響完就把工作階段交還出去，否則 `.duckOthers` 會一直壓著使用者的音樂。
+    private func deactivateSessionIfIdle() {
+        guard !players.values.contains(where: { $0.isPlaying }) else { return }
+        deactivateSession()
+    }
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Task { @MainActor in SoundPlayer.shared.deactivateSessionIfIdle() }
     }
 
     // MARK: - 播放
@@ -63,6 +73,7 @@ final class SoundPlayer {
         if let cached = players[id] { return cached }
         guard let url = Bundle.main.url(forResource: name, withExtension: ext),
               let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        player.delegate = self
         player.prepareToPlay()
         players[id] = player
         return player
