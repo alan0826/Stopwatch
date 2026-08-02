@@ -1,0 +1,20 @@
+# Xcode 使用者狀態
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+# 建置產物
+build/
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Packages/
+Package.resolved
+
+# macOS
+.DS_Store

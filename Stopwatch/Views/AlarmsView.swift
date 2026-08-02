@@ -13,10 +13,14 @@ struct AlarmsView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            VStack(spacing: 0) {
+                NotificationPermissionBanner()
+
                 if store.alarms.isEmpty {
+                    Spacer()
                     ContentUnavailableView("沒有鬧鐘", systemImage: "alarm",
                                            description: Text("點右上角的 ＋ 加入一個鬧鐘。"))
+                    Spacer()
                 } else {
                     List {
                         Section("其他") {
@@ -33,6 +37,7 @@ struct AlarmsView: View {
                     .listStyle(.insetGrouped)
                 }
             }
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("鬧鐘")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

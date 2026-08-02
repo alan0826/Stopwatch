@@ -18,7 +18,11 @@ struct SettingsView: View {
                 Section {
                     Toggle("碼表執行時不自動鎖定螢幕", isOn: $controller.keepScreenOn)
                 } footer: {
-                    Text("切到背景時改用系統通知響鈴，最多預先排 58 次提醒，回到 App 會自動補排。")
+                    Text("""
+                    切到背景或鎖定螢幕時，響鈴改由系統通知發出。
+
+                    iOS 限制每個 App 最多只能預先排 64 則通知，本 App 使用 58 則。單獨一組「每 5 分鐘」約可撐 4.8 小時；同時開多組排程時會共用這個額度，用完之後就不會再響，直到你回到 App（回來時會自動重新排下一批）。長時間放著不管的話，記得偶爾打開 App 一次。
+                    """)
                 }
 
                 Section {

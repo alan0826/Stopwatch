@@ -14,7 +14,10 @@ struct RootView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            VStack(spacing: 0) {
+                NotificationPermissionBanner()
+
+                List {
                 Section {
                     timerCard
                         .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
@@ -28,8 +31,10 @@ struct RootView: View {
 
                 schedulesSection
                 historySection
+                }
+                .listStyle(.insetGrouped)
             }
-            .listStyle(.insetGrouped)
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("碼表提醒")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -215,6 +220,7 @@ struct RootView: View {
                             Image(systemName: "bell.badge.fill")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                                .accessibilityLabel("由背景通知送達")
                         }
                         Text(TimeFormat.clock(event.at))
                             .monospacedDigit()
@@ -293,6 +299,7 @@ private struct ScheduleRow: View {
                     .foregroundStyle(.secondary)
                 HStack(spacing: 4) {
                     Image(systemName: "speaker.wave.2.fill")
+                        .accessibilityHidden(true)
                     Text(soundName)
                     if schedule.chimeCount > 1 {
                         Text("× \(schedule.chimeCount)")

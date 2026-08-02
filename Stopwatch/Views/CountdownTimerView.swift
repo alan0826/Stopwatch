@@ -62,6 +62,7 @@ struct CountdownTimerView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .disabled(model.isActive)
+                                .accessibilityLabel("開始 \(TimeFormat.duration(seconds)) 的計時")
                             }
                         }
                     }
@@ -94,10 +95,12 @@ struct CountdownTimerView: View {
 
                 HStack(spacing: 4) {
                     Image(systemName: "bell.fill")
+                        .accessibilityHidden(true)
                     Text(model.endTimeText)
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .accessibilityLabel("結束時間 \(model.endTimeText)")
             }
             .padding(36)
         }
