@@ -5,6 +5,7 @@
 
 import AudioToolbox
 import Foundation
+import UserNotifications
 
 enum SoundCategory: String, CaseIterable, Identifiable, Hashable {
     case builtin = "內建音效"
@@ -117,5 +118,14 @@ enum SoundCatalog {
     static func notificationSoundName(for option: SoundOption) -> String? {
         guard case .bundled(let name, let ext) = option.source else { return nil }
         return "\(name).\(ext)"
+    }
+
+    /// 背景通知要用的鈴聲。系統提示音沒有可引用的音檔，只能退回預設通知音。
+    static func notificationSound(for soundID: String) -> UNNotificationSound {
+        guard let option = resolved(id: soundID),
+              let name = notificationSoundName(for: option) else {
+            return .default
+        }
+        return UNNotificationSound(named: UNNotificationSoundName(name))
     }
 }

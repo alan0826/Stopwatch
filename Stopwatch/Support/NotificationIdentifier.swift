@@ -5,23 +5,9 @@
 
 import UserNotifications
 
-/// 各功能的通知識別碼前綴，讓彼此可以獨立排程與取消，不會互相清掉。
+/// 提醒通知的識別碼前綴，讓 App 只清理自己排的那一批。
 enum NotificationID {
     static let reminder = "reminder-"
-    static let alarm = "alarm-"
-    static let timer = "timer-"
-    /// 貪睡刻意不用 `alarm-` 開頭：鬧鐘清單重排時會清掉所有 `alarm-` 的待送通知，
-    /// 同前綴的話使用者按完「稍後提醒」再開一次 App，那則貪睡就被連帶取消了。
-    static let snooze = "snooze-"
-
-    static let timerCurrent = timer + "current"
-
-    static let alarmCategory = "ALARM_CATEGORY"
-    static let snoozeAction = "ALARM_SNOOZE"
-    static let stopAction = "ALARM_STOP"
-
-    /// 稍後提醒的間隔，與系統鬧鐘一致。
-    static let snoozeInterval: TimeInterval = 9 * 60
 }
 
 extension UNUserNotificationCenter {

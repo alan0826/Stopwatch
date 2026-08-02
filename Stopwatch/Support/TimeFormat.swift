@@ -35,19 +35,6 @@ enum TimeFormat {
         return String(format: "%02d:%02d", minutes, seconds)
     }
 
-    /// 倒數顯示：`4:59`，超過一小時變成 `1:04:59`（不足一秒無條件進位）
-    static func countdown(_ interval: TimeInterval) -> String {
-        let total = Int(max(interval, 0).rounded(.up))
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let seconds = total % 60
-
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%d:%02d", minutes, seconds)
-    }
-
     /// 人類可讀的長度：`1 小時 5 分 30 秒`
     static func duration(_ interval: TimeInterval) -> String {
         let total = Int(max(interval, 0).rounded())

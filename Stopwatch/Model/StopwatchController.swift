@@ -432,7 +432,7 @@ final class StopwatchController {
     }
 
     private static func notificationSound(for schedule: AlarmSchedule) -> UNNotificationSound {
-        AlarmStore.notificationSound(for: schedule.soundID)
+        SoundCatalog.notificationSound(for: schedule.soundID)
     }
 
     private func cancelPendingNotifications() {
