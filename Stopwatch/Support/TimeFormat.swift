@@ -35,6 +35,24 @@ enum TimeFormat {
         return String(format: "%02d:%02d", minutes, seconds)
     }
 
+    /// 一天當中的時刻：`14:30`（依使用者的 12／24 小時制設定）
+    static func timeOfDay(hour: Int, minute: Int) -> String {
+        let date = Calendar.current.date(from: DateComponents(year: 2001, month: 1, day: 1,
+                                                              hour: hour, minute: minute))
+        return date.map { timeOfDayFormatter.string(from: $0) } ?? "\(hour):\(minute)"
+    }
+
+    static func timeOfDay(_ date: Date) -> String {
+        timeOfDayFormatter.string(from: date)
+    }
+
+    private static let timeOfDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.setLocalizedDateFormatFromTemplate("j:mm")
+        return formatter
+    }()
+
     /// 人類可讀的長度：`1 小時 5 分 30 秒`
     static func duration(_ interval: TimeInterval) -> String {
         let total = Int(max(interval, 0).rounded())

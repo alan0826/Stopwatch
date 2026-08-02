@@ -90,7 +90,14 @@ struct RootView: View {
 
     @ViewBuilder
     private var nextFireLine: some View {
-        if let next = controller.nextFire {
+        if let armed = controller.armedFirstFire {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Palette.color(at: armed.schedule.colorIndex))
+                    .frame(width: 8, height: 8)
+                Text("\(TimeFormat.timeOfDay(armed.date)) 響第一次 · 碼表同時起跑")
+            }
+        } else if let next = controller.nextFire {
             let remaining = max(next.time - controller.elapsed, 0)
             HStack(spacing: 6) {
                 Circle()
@@ -144,7 +151,9 @@ struct RootView: View {
                 ForEach(controller.schedules) { schedule in
                     ScheduleRow(schedule: schedule,
                                 nextFire: controller.nextFireTime(for: schedule),
+                                nextFireDate: controller.nextFireDate(for: schedule),
                                 elapsed: controller.elapsed,
+                                isWaiting: controller.armedFirstFire != nil,
                                 firedCount: controller.firedCount(for: schedule))
                     { enabled in
                         controller.setEnabled(enabled, for: schedule)
@@ -253,7 +262,7 @@ struct RootView: View {
     // MARK: -
 
     private func newSchedule() -> AlarmSchedule {
-        var schedule = AlarmSchedule()
+        var schedule = AlarmSchedule.makeNew()
         schedule.colorIndex = controller.schedules.count
         return schedule
     }
@@ -264,7 +273,10 @@ struct RootView: View {
 private struct ScheduleRow: View {
     let schedule: AlarmSchedule
     let nextFire: TimeInterval?
+    let nextFireDate: Date?
     let elapsed: TimeInterval
+    /// 還在等第一次響鈴：這時候顯示時鐘時刻比顯示碼表倒數有意義。
+    let isWaiting: Bool
     let firedCount: Int
     let onToggle: (Bool) -> Void
 
@@ -303,8 +315,17 @@ private struct ScheduleRow: View {
             Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 4) {
-                if schedule.isEnabled, let nextFire {
-                    Text(TimeFormat.clock(max(nextFire - elapsed, 0)))
+                if schedule.isEnabled, isWaiting {
+                    Text(schedule.firstTimeText)
+                        .font(.callout.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(Palette.color(at: schedule.colorIndex))
+                } else if schedule.isEnabled, let nextFire {
+                    // 還要等一小時以上就直接寫時刻，不然會出現「23:53:42」這種讀不出意思的倒數。
+                    let remaining = max(nextFire - elapsed, 0)
+                    Text(remaining >= 3600 && nextFireDate != nil
+                         ? TimeFormat.timeOfDay(nextFireDate!)
+                         : TimeFormat.clock(remaining))
                         .font(.callout.weight(.semibold))
                         .monospacedDigit()
                         .foregroundStyle(Palette.color(at: schedule.colorIndex))

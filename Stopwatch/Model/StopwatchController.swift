@@ -22,6 +22,16 @@ final class StopwatchController {
     private var startedAt: Date?
     private var accumulated: TimeInterval = 0
 
+    /// 這一輪碼表最初起跑的絕對時刻（暫停不會改變它，重置才會清掉）。
+    /// 各排程設定的時鐘時刻就是換算成「距離這個原點幾秒」放到碼表時間軸上。
+    private(set) var sessionStart: Date?
+
+    /// 還在等待時，「第一次響鈴」的絕對時刻。
+    ///
+    /// 存起來而不是每次重算：使用者多半會關掉 App 等它響，回來時得知道
+    /// 那個時刻已經過了，而不是傻傻地把它算成明天同一時間。
+    private(set) var armedAnchor: Date?
+
     /// 由計時器推動的畫面時間，用來觸發 SwiftUI 更新。
     private(set) var displayNow = Date()
 
@@ -39,8 +49,13 @@ final class StopwatchController {
 
     var schedules: [AlarmSchedule] = [] {
         didSet {
-            guard schedules != oldValue else { return }
+            // init 期間先不要有副作用：存檔的碼表狀態還沒讀回來。
+            guard isInitialised, schedules != oldValue else { return }
             persistSchedules()
+            // 排程改動可能換掉最早的那一組，等待中的時刻與計時器都要跟著調整。
+            refreshArmedAnchor()
+            persistRunState()
+            startTicker()
         }
     }
 
@@ -61,8 +76,9 @@ final class StopwatchController {
     // MARK: - 內部狀態
 
     private enum Keys {
-        static let schedules = "schedules.v1"
-        static let runState = "stopwatch.run.v1"
+        // v2：第一次響鈴由「碼表秒數」改成「時鐘時刻」，舊資料無法對應，直接換一個鍵。
+        static let schedules = "schedules.v2"
+        static let runState = "stopwatch.run.v2"
     }
 
     /// 存檔用的碼表狀態，App 被系統終止之後可以接回原本的時間軸。
@@ -70,6 +86,9 @@ final class StopwatchController {
         var isRunning: Bool
         var accumulated: TimeInterval
         var startedAt: Date?
+        /// 這一輪碼表最初起跑的絕對時刻，用來換算各排程的第一次響鈴落在碼表的第幾秒。
+        var sessionStart: Date?
+        var armedAnchor: Date?
     }
 
     /// 超過這個長度就當作是上次忘了停，重新歸零而不是接一個天文數字回來。
@@ -83,6 +102,7 @@ final class StopwatchController {
     /// 下一次 tick 是不是「從背景回來的補算」。背景期間的提醒已經由通知響過，
     /// 補算時只補登紀錄、不再出聲。
     private var isCatchingUp = false
+    private var isInitialised = false
 
     /// 本地通知一次最多只會保留 64 則，這裡預留一些空間。
     private let maxScheduledNotifications = 58
@@ -90,6 +110,8 @@ final class StopwatchController {
     init() {
         schedules = Self.loadSchedules()
         restoreRunState()
+        if armedAnchor == nil { refreshArmedAnchor() }
+        isInitialised = true
     }
 
     /// App 啟動時呼叫。
@@ -100,10 +122,10 @@ final class StopwatchController {
         refreshNotificationStatus()
         requestNotificationPermissionIfNeeded()
 
-        if isRunning {
-            startTicker()
-            applyIdleTimer()
-        }
+        catchUpArmedStartIfNeeded()
+        // 執行中要接回碼表；等待中要盯著時鐘，兩種都需要計時器。
+        startTicker()
+        applyIdleTimer()
     }
 
     // MARK: - 碼表控制
@@ -112,12 +134,38 @@ final class StopwatchController {
         isRunning ? pause() : start()
     }
 
+    /// 手動按「開始」：不等時鐘，現在就當作碼表的起點。
     func start() {
         guard !isRunning else { return }
-        startedAt = Date()
+        let now = Date()
+        startedAt = now
+        if sessionStart == nil { sessionStart = now }
         isRunning = true
         lastCheckedElapsed = accumulated
+        displayNow = now
+
+        startTicker()
+        applyIdleTimer()
+        persistRunState()
+    }
+
+    /// 時鐘走到最早一組排程的「第一次響鈴」時刻，碼表自動從 0 開始跑。
+    ///
+    /// `catchingUp` 代表這個時刻是在 App 沒在前景時過掉的：那幾響已經由通知送出，
+    /// 這裡只補登紀錄，不再重複出聲。
+    private func autoStart(at moment: Date, catchingUp: Bool) {
+        sessionStart = moment
+        armedAnchor = nil
+        startedAt = moment
+        accumulated = 0
+        isRunning = true
         displayNow = Date()
+
+        // 第一次響鈴落在碼表的第 0 秒，而 fireTimes 只收「> from」的時間點，
+        // 所以起算點要往前挪一點，那一響才不會被跳過。
+        let now = preciseElapsed
+        fireDueAlarms(from: -1, to: now, catchingUp: catchingUp)
+        lastCheckedElapsed = now
 
         startTicker()
         applyIdleTimer()
@@ -137,26 +185,34 @@ final class StopwatchController {
         persistRunState()
     }
 
+    /// 重置：碼表歸零、清除紀錄，並重新等待下一次的「第一次響鈴」時刻。
     func reset() {
         stopTicker()
         isRunning = false
         startedAt = nil
+        sessionStart = nil
         accumulated = 0
         lastCheckedElapsed = 0
         displayNow = Date()
         events.removeAll()
         flash = nil
+        refreshArmedAnchor()
 
         SoundPlayer.shared.stopAll()
         cancelPendingNotifications()
         applyIdleTimer()
         persistRunState()
+        startTicker()            // 回到等待狀態，還是要盯著時鐘
     }
 
     // MARK: - 碼表狀態存檔
 
     private func persistRunState() {
-        let state = RunState(isRunning: isRunning, accumulated: accumulated, startedAt: startedAt)
+        let state = RunState(isRunning: isRunning,
+                             accumulated: accumulated,
+                             startedAt: startedAt,
+                             sessionStart: sessionStart,
+                             armedAnchor: armedAnchor)
         guard let data = try? JSONEncoder().encode(state) else { return }
         UserDefaults.standard.set(data, forKey: Keys.runState)
     }
@@ -169,11 +225,15 @@ final class StopwatchController {
         accumulated = max(state.accumulated, 0)
         startedAt = state.isRunning ? state.startedAt : nil
         isRunning = state.isRunning && state.startedAt != nil
+        sessionStart = state.sessionStart
+        armedAnchor = state.armedAnchor
         displayNow = Date()
 
         guard preciseElapsed <= Self.maxRestorableElapsed else {
             accumulated = 0
             startedAt = nil
+            sessionStart = nil
+            armedAnchor = nil
             isRunning = false
             persistRunState()
             return
@@ -185,9 +245,12 @@ final class StopwatchController {
 
     // MARK: - 計時器
 
+    /// 執行中要 30fps 推動碼表數字；只是在等第一次響鈴時，每秒看一次時鐘就夠了。
     private func startTicker() {
         stopTicker()
-        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+        guard isRunning || isArmed else { return }
+
+        let timer = Timer(timeInterval: isRunning ? 1.0 / 30.0 : 1.0, repeats: true) { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.async { self.tick() }
         }
@@ -203,7 +266,14 @@ final class StopwatchController {
 
     private func tick() {
         displayNow = Date()
-        guard isRunning else { return }
+
+        guard isRunning else {
+            // 還沒開始：盯著時鐘，到了最早一組排程的時刻就自動起跑。
+            if let anchor = armedAnchor, anchor <= Date() {
+                autoStart(at: anchor, catchingUp: false)
+            }
+            return
+        }
 
         let now = preciseElapsed
         fireDueAlarms(from: lastCheckedElapsed, to: now, catchingUp: isCatchingUp)
@@ -218,7 +288,9 @@ final class StopwatchController {
 
         var due: [(schedule: AlarmSchedule, time: TimeInterval)] = []
         for schedule in schedules where schedule.isEnabled {
-            for time in schedule.fireTimes(after: from, through: now) {
+            for time in schedule.fireTimes(firstFire: firstFireElapsed(for: schedule),
+                                           after: from,
+                                           through: now) {
                 due.append((schedule, time))
             }
         }
@@ -267,14 +339,64 @@ final class StopwatchController {
         SoundPlayer.shared.preview(option)
     }
 
-    // MARK: - 下一次提醒
+    // MARK: - 第一次響鈴與下一次提醒
 
-    /// 所有排程中最接近的下一次響鈴。
+    /// 有啟用的排程、而且這一輪還沒起跑 —— 也就是正在等時鐘走到第一次響鈴。
+    var isArmed: Bool {
+        sessionStart == nil && armedAnchor != nil
+    }
+
+    /// 等待中時，最早會響的那一組排程與它的絕對時刻。
+    var armedFirstFire: (schedule: AlarmSchedule, date: Date)? {
+        guard sessionStart == nil, let anchor = armedAnchor else { return nil }
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: anchor)
+        guard let schedule = schedules.first(where: {
+            $0.isEnabled && $0.firstHour == parts.hour && $0.firstMinute == parts.minute
+        }) else { return nil }
+        return (schedule, anchor)
+    }
+
+    /// 重新推算等待中的第一次響鈴時刻。已經起跑的話就沒有等待可言。
+    private func refreshArmedAnchor() {
+        guard sessionStart == nil else {
+            armedAnchor = nil
+            return
+        }
+        let now = Date()
+        armedAnchor = schedules
+            .filter(\.isEnabled)
+            .compactMap { $0.firstFireDate(onOrAfter: now) }
+            .min()
+    }
+
+    /// 等待期間 App 可能整個被關掉，回來時要把「已經到點」這件事補起來。
+    private func catchUpArmedStartIfNeeded() {
+        guard sessionStart == nil else { return }
+        if armedAnchor == nil { refreshArmedAnchor() }
+
+        guard let anchor = armedAnchor, anchor <= Date() else { return }
+
+        // 隔了太久沒開 App，就不要硬接一個幾天前的時間軸，直接等下一次。
+        guard Date().timeIntervalSince(anchor) <= Self.maxRestorableElapsed else {
+            refreshArmedAnchor()
+            persistRunState()
+            return
+        }
+        autoStart(at: anchor, catchingUp: true)
+    }
+
+    /// 這組排程的第一次響鈴落在碼表的第幾秒。
+    func firstFireElapsed(for schedule: AlarmSchedule) -> TimeInterval {
+        guard let sessionStart else { return 0 }
+        return schedule.firstFireElapsed(stopwatchStart: sessionStart)
+    }
+
+    /// 所有排程中最接近的下一次響鈴（碼表時間軸）。
     var nextFire: (schedule: AlarmSchedule, time: TimeInterval)? {
         let now = elapsed
         var best: (schedule: AlarmSchedule, time: TimeInterval)?
         for schedule in schedules where schedule.isEnabled {
-            guard let time = schedule.nextFireTime(after: now) else { continue }
+            guard let time = nextFireTime(for: schedule), time > now else { continue }
             if best == nil || time < best!.time {
                 best = (schedule, time)
             }
@@ -282,8 +404,17 @@ final class StopwatchController {
         return best
     }
 
+    /// 下一次響鈴的絕對時刻，用在「還很久」時改顯示時鐘時間而不是一長串倒數。
+    func nextFireDate(for schedule: AlarmSchedule) -> Date? {
+        guard let sessionStart, let time = nextFireTime(for: schedule) else { return nil }
+        return sessionStart.addingTimeInterval(time)
+    }
+
     func nextFireTime(for schedule: AlarmSchedule) -> TimeInterval? {
-        schedule.nextFireTime(after: elapsed)
+        guard sessionStart != nil else { return nil }
+        return schedule.upcomingFireTimes(firstFire: firstFireElapsed(for: schedule),
+                                          after: elapsed,
+                                          limit: 1).first
     }
 
     func firedCount(for schedule: AlarmSchedule) -> Int {
@@ -331,9 +462,8 @@ final class StopwatchController {
     }
 
     private static func defaultSchedule() -> AlarmSchedule {
-        var schedule = AlarmSchedule()
+        var schedule = AlarmSchedule.makeNew()
         schedule.label = "每 5 分鐘"
-        schedule.firstFire = 300
         schedule.interval = 300
         schedule.repeats = true
         return schedule
@@ -352,13 +482,13 @@ final class StopwatchController {
             displayNow = Date()
             cancelPendingNotifications()
             refreshNotificationStatus()
-            if isRunning { tick() }   // 補登在背景期間響過的提醒
+            catchUpArmedStartIfNeeded()   // 背景期間可能已經走到第一次響鈴的時刻
+            startTicker()
+            if isRunning { tick() }       // 補登在背景期間響過的提醒
             isCatchingUp = false
         case .background:
             isCatchingUp = true
-            if isRunning {
-                scheduleBackgroundNotifications()
-            }
+            scheduleBackgroundNotifications()
         default:
             break
         }
@@ -396,27 +526,46 @@ final class StopwatchController {
         backgroundTask = .invalid
     }
 
+    /// 接下來每一次響鈴的絕對時刻。執行中是從碼表往後推；還在等待則是從
+    /// 預定的第一次響鈴時刻往後推 —— 後者讓使用者不必把 App 開著也會響。
+    private func upcomingFireMoments(limit: Int) -> [(schedule: AlarmSchedule, time: TimeInterval, date: Date)] {
+        let origin: Date
+        let from: TimeInterval
+
+        if isRunning {
+            origin = Date().addingTimeInterval(-preciseElapsed)
+            from = preciseElapsed
+        } else if let anchor = armedAnchor {
+            origin = anchor
+            from = -1                // 讓落在第 0 秒的第一響也算進去
+        } else {
+            return []                // 暫停中：碼表沒在走，不排任何通知
+        }
+
+        var upcoming: [(schedule: AlarmSchedule, time: TimeInterval, date: Date)] = []
+        for schedule in schedules where schedule.isEnabled {
+            let firstFire = schedule.firstFireElapsed(stopwatchStart: origin)
+            for time in schedule.upcomingFireTimes(firstFire: firstFire, after: from, limit: limit) {
+                upcoming.append((schedule, time, origin.addingTimeInterval(time)))
+            }
+        }
+        upcoming.sort { $0.date < $1.date }
+        return Array(upcoming.prefix(limit))
+    }
+
     /// 進背景時，把接下來的響鈴時間點排成本地通知（iOS 上限 64 則）。
     private func scheduleBackgroundNotifications() {
         beginBackgroundTask()
-        let now = preciseElapsed
-        var upcoming: [(schedule: AlarmSchedule, time: TimeInterval)] = []
-        for schedule in schedules where schedule.isEnabled {
-            for time in schedule.upcomingFireTimes(after: now, limit: maxScheduledNotifications) {
-                upcoming.append((schedule, time))
-            }
-        }
-        upcoming.sort { $0.time < $1.time }
-        let batch = Array(upcoming.prefix(maxScheduledNotifications))
+        let batch = upcomingFireMoments(limit: maxScheduledNotifications)
 
         UNUserNotificationCenter.current().replacePending(withPrefix: NotificationID.reminder) {
             batch.compactMap { item in
-                let delay = item.time - now
+                let delay = item.date.timeIntervalSinceNow
                 guard delay > 0.5 else { return nil }
 
                 let content = UNMutableNotificationContent()
                 content.title = item.schedule.displayLabel
-                content.body = "碼表 \(TimeFormat.clock(item.time))"
+                content.body = TimeFormat.timeOfDay(item.date)
                 content.interruptionLevel = .timeSensitive
                 content.sound = Self.notificationSound(for: item.schedule)
 

@@ -9,6 +9,8 @@ struct ScheduleEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var schedule: AlarmSchedule
+    /// `DatePicker` 要的是 `Date`，存的則是時／分兩個數字。
+    @State private var firstTime: Date
     private let isNew: Bool
     private let onSave: (AlarmSchedule) -> Void
     private let onDelete: (() -> Void)?
@@ -21,6 +23,9 @@ struct ScheduleEditorView: View {
          onSave: @escaping (AlarmSchedule) -> Void,
          onDelete: (() -> Void)? = nil) {
         _schedule = State(initialValue: schedule)
+        _firstTime = State(initialValue: Calendar.current.date(
+            from: DateComponents(year: 2001, month: 1, day: 1,
+                                 hour: schedule.firstHour, minute: schedule.firstMinute)) ?? Date())
         self.isNew = isNew
         self.onSave = onSave
         self.onDelete = onDelete
@@ -46,11 +51,11 @@ struct ScheduleEditorView: View {
                 }
 
                 Section {
-                    DurationPicker(seconds: $schedule.firstFire)
+                    DatePicker("時刻", selection: $firstTime, displayedComponents: .hourAndMinute)
                 } header: {
                     Text("第一次響鈴")
                 } footer: {
-                    Text("碼表跑到 \(TimeFormat.clock(schedule.firstFire)) 時響第一次。")
+                    Text("時鐘走到 \(TimeFormat.timeOfDay(firstTime)) 時響第一次，碼表也從這一刻開始計時。")
                 }
 
                 if schedule.repeats {
@@ -69,7 +74,7 @@ struct ScheduleEditorView: View {
                         }
                     } footer: {
                         if schedule.hasEnd {
-                            Text("碼表超過 \(TimeFormat.clock(schedule.endAt)) 之後就不再響。")
+                            Text("第一次響鈴之後再過 \(TimeFormat.duration(schedule.endAt)) 就不再響。")
                         } else {
                             Text("不設定的話會一直重複，直到你暫停或重置碼表。")
                         }
@@ -137,14 +142,15 @@ struct ScheduleEditorView: View {
     }
 
     private var isValid: Bool {
-        if schedule.repeats && schedule.interval < 1 { return false }
-        if schedule.firstFire < 1 { return false }
-        return true
+        !(schedule.repeats && schedule.interval < 1)
     }
 
     private var intervalFooter: String {
         guard schedule.interval >= 1 else { return "間隔至少要 1 秒。" }
-        let times = (1...3).map { TimeFormat.clock(schedule.firstFire + Double($0) * schedule.interval) }
+        // 用時鐘時刻列出接下來幾次，比「碼表第幾秒」直觀。
+        let times = (1...3).map {
+            TimeFormat.timeOfDay(firstTime.addingTimeInterval(Double($0) * schedule.interval))
+        }
         return "接著會在 \(times.joined(separator: "、"))… 響。"
     }
 
@@ -153,10 +159,9 @@ struct ScheduleEditorView: View {
             HStack(spacing: 8) {
                 ForEach(presets, id: \.self) { minutes in
                     let seconds = TimeInterval(minutes * 60)
-                    let selected = schedule.interval == seconds && schedule.firstFire == seconds
+                    let selected = schedule.interval == seconds
                     Button {
                         schedule.interval = seconds
-                        schedule.firstFire = seconds
                     } label: {
                         Text("每 \(minutes) 分")
                             .font(.footnote.weight(.medium))
@@ -192,10 +197,12 @@ struct ScheduleEditorView: View {
 
     private func normalized() -> AlarmSchedule {
         var result = schedule
-        result.firstFire = max(result.firstFire, 1)
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: firstTime)
+        result.firstHour = parts.hour ?? result.firstHour
+        result.firstMinute = parts.minute ?? result.firstMinute
         result.interval = max(result.interval, 1)
         if result.hasEnd {
-            result.endAt = max(result.endAt, result.firstFire)
+            result.endAt = max(result.endAt, result.interval)
         }
         return result
     }
