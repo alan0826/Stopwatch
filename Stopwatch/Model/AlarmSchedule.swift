@@ -28,6 +28,9 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
     var hasEnd = false
     /// 停止重複的碼表秒數（從第一次響鈴起算）
     var endAt: TimeInterval = 3600
+    /// 一輪跑完之後，隔天同一個時刻再來一輪。
+    /// 需要搭配結束時間，否則這一輪永遠不會結束，也就輪不到隔天。
+    var repeatsDaily = false
 
     /// 鈴聲識別碼，對應 `SoundCatalog`
     var soundID = SoundCatalog.defaultID
@@ -35,13 +38,43 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
     var chimeCount = 1
     var colorIndex = 0
 
-    /// 以現在時刻為基準，往後推到下一個整分的新排程。
+    init() {}
+
+    /// 每個欄位都用「有就讀、沒有就用預設值」，這樣之後再加欄位時，
+    /// 舊的存檔不會整份解不開，使用者的排程也就不會被清掉。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = AlarmSchedule()
+
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? fallback.id
+        label = try container.decodeIfPresent(String.self, forKey: .label) ?? fallback.label
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? fallback.isEnabled
+        firstHour = try container.decodeIfPresent(Int.self, forKey: .firstHour) ?? fallback.firstHour
+        firstMinute = try container.decodeIfPresent(Int.self, forKey: .firstMinute) ?? fallback.firstMinute
+        repeats = try container.decodeIfPresent(Bool.self, forKey: .repeats) ?? fallback.repeats
+        interval = try container.decodeIfPresent(TimeInterval.self, forKey: .interval) ?? fallback.interval
+        hasEnd = try container.decodeIfPresent(Bool.self, forKey: .hasEnd) ?? fallback.hasEnd
+        endAt = try container.decodeIfPresent(TimeInterval.self, forKey: .endAt) ?? fallback.endAt
+        repeatsDaily = try container.decodeIfPresent(Bool.self, forKey: .repeatsDaily) ?? fallback.repeatsDaily
+        soundID = try container.decodeIfPresent(String.self, forKey: .soundID) ?? fallback.soundID
+        chimeCount = try container.decodeIfPresent(Int.self, forKey: .chimeCount) ?? fallback.chimeCount
+        colorIndex = try container.decodeIfPresent(Int.self, forKey: .colorIndex) ?? fallback.colorIndex
+    }
+
+    /// 新排程的預設時刻：往後推到下一個 5 分整。
+    ///
+    /// 至少留 2 分鐘的餘裕 —— 預設值若只差幾十秒，使用者還在設定的時候那個時刻就過了，
+    /// 存檔之後會被安靜地排到隔天。
     static func makeNew(after now: Date = Date()) -> AlarmSchedule {
         var schedule = AlarmSchedule()
-        let next = now.addingTimeInterval(60)
-        let parts = Calendar.current.dateComponents([.hour, .minute], from: next)
-        schedule.firstHour = parts.hour ?? 9
-        schedule.firstMinute = parts.minute ?? 0
+        let calendar = Calendar.current
+        let lead = now.addingTimeInterval(120)
+        let minute = calendar.component(.minute, from: lead)
+        let target = calendar.date(byAdding: .minute, value: (5 - minute % 5) % 5, to: lead) ?? lead
+
+        let parts = calendar.dateComponents([.hour, .minute], from: target)
+        schedule.firstHour = parts.hour ?? schedule.firstHour
+        schedule.firstMinute = parts.minute ?? schedule.firstMinute
         return schedule
     }
 
@@ -62,10 +95,11 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
         var parts = ["\(firstTimeText) 第一次"]
         if repeats {
             parts.append("每 \(TimeFormat.duration(interval))")
-            if hasEnd { parts.append("到 \(TimeFormat.clock(endAt)) 為止") }
+            if hasEnd { parts.append("持續 \(TimeFormat.duration(endAt))") }
         } else {
             parts.append("單次")
         }
+        if repeatsDaily { parts.append("每天") }
         return parts.joined(separator: " · ")
     }
 
@@ -136,12 +170,15 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
 }
 
 /// 已經響過的一次提醒紀錄。
-struct FireEvent: Identifiable, Hashable {
-    let id = UUID()
-    let scheduleID: UUID
-    let label: String
-    let at: TimeInterval
-    let colorIndex: Int
+struct FireEvent: Identifiable, Hashable, Codable {
+    var id = UUID()
+    var scheduleID: UUID
+    var label: String
+    /// 響鈴時碼表的秒數
+    var at: TimeInterval
+    /// 響鈴時的實際時刻，跨越好幾輪之後這個才讀得出意思
+    var firedAt: Date
+    var colorIndex: Int
     /// true 代表 App 當時在背景，由系統通知送達（回到前景才補登紀錄）
-    let deliveredInBackground: Bool
+    var deliveredInBackground: Bool
 }

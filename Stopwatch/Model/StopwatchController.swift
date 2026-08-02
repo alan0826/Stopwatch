@@ -79,6 +79,7 @@ final class StopwatchController {
         // v2：第一次響鈴由「碼表秒數」改成「時鐘時刻」，舊資料無法對應，直接換一個鍵。
         static let schedules = "schedules.v2"
         static let runState = "stopwatch.run.v2"
+        static let events = "events.v1"
     }
 
     /// 存檔用的碼表狀態，App 被系統終止之後可以接回原本的時間軸。
@@ -109,9 +110,14 @@ final class StopwatchController {
 
     init() {
         schedules = Self.loadSchedules()
+        events = Self.loadEvents()
         restoreRunState()
         if armedAnchor == nil { refreshArmedAnchor() }
         isInitialised = true
+
+        // 首次啟動時的預設排程是在記憶體裡生出來的，didSet 在 init 期間又被擋著，
+        // 不主動存一次的話它每次啟動都會用新的時刻重新生成一份。
+        persistSchedules()
     }
 
     /// App 啟動時呼叫。
@@ -125,7 +131,6 @@ final class StopwatchController {
         catchUpArmedStartIfNeeded()
         // 執行中要接回碼表；等待中要盯著時鐘，兩種都需要計時器。
         startTicker()
-        applyIdleTimer()
     }
 
     // MARK: - 碼表控制
@@ -145,7 +150,6 @@ final class StopwatchController {
         displayNow = now
 
         startTicker()
-        applyIdleTimer()
         persistRunState()
     }
 
@@ -168,7 +172,6 @@ final class StopwatchController {
         lastCheckedElapsed = now
 
         startTicker()
-        applyIdleTimer()
         persistRunState()
     }
 
@@ -181,7 +184,6 @@ final class StopwatchController {
 
         stopTicker()
         cancelPendingNotifications()
-        applyIdleTimer()
         persistRunState()
     }
 
@@ -195,12 +197,12 @@ final class StopwatchController {
         lastCheckedElapsed = 0
         displayNow = Date()
         events.removeAll()
+        persistEvents()
         flash = nil
         refreshArmedAnchor()
 
         SoundPlayer.shared.stopAll()
         cancelPendingNotifications()
-        applyIdleTimer()
         persistRunState()
         startTicker()            // 回到等待狀態，還是要盯著時鐘
     }
@@ -217,7 +219,7 @@ final class StopwatchController {
         UserDefaults.standard.set(data, forKey: Keys.runState)
     }
 
-    /// 只還原資料，計時器與螢幕鎖定留給 `handleLaunch()`，避免在 App 還沒啟動完就碰 `UIApplication`。
+    /// 只還原資料，計時器留給 `handleLaunch()` 再開。
     private func restoreRunState() {
         guard let data = UserDefaults.standard.data(forKey: Keys.runState),
               let state = try? JSONDecoder().decode(RunState.self, from: data) else { return }
@@ -239,7 +241,7 @@ final class StopwatchController {
             return
         }
 
-        // 紀錄本身沒有存檔，冷啟動時就不補登背景期間響過的提醒，只把時間軸接回來。
+        // 冷啟動時不重跑背景期間的響鈴：那些通知已經送出，紀錄也一併存檔讀回來了。
         lastCheckedElapsed = preciseElapsed
     }
 
@@ -279,6 +281,28 @@ final class StopwatchController {
         fireDueAlarms(from: lastCheckedElapsed, to: now, catchingUp: isCatchingUp)
         lastCheckedElapsed = now
         isCatchingUp = false
+
+        rearmForTomorrowIfFinished()
+    }
+
+    /// 這一輪的排程全部響完了，而且有排程設了「每天重複」—— 收掉碼表，等隔天再來一輪。
+    /// 紀錄保留，只有使用者按重置才會清空。
+    private func rearmForTomorrowIfFinished() {
+        guard nextFire == nil,
+              schedules.contains(where: { $0.isEnabled && $0.repeatsDaily })
+        else { return }
+
+        stopTicker()
+        isRunning = false
+        startedAt = nil
+        sessionStart = nil
+        accumulated = 0
+        lastCheckedElapsed = 0
+        displayNow = Date()
+
+        refreshArmedAnchor()
+        persistRunState()
+        startTicker()
     }
 
     // MARK: - 響鈴
@@ -306,18 +330,33 @@ final class StopwatchController {
                 ring(item.schedule, at: item.time)
             }
         }
+        persistEvents()
     }
 
     private func record(_ schedule: AlarmSchedule, at time: TimeInterval, missed: Bool) {
         let event = FireEvent(scheduleID: schedule.id,
                               label: schedule.displayLabel,
                               at: time,
+                              firedAt: (sessionStart ?? Date()).addingTimeInterval(time),
                               colorIndex: schedule.colorIndex,
                               deliveredInBackground: missed)
         events.insert(event, at: 0)
         if events.count > 200 {
             events.removeLast(events.count - 200)
         }
+    }
+
+    private func persistEvents() {
+        guard let data = try? JSONEncoder().encode(events) else { return }
+        UserDefaults.standard.set(data, forKey: Keys.events)
+    }
+
+    private static func loadEvents() -> [FireEvent] {
+        guard let data = UserDefaults.standard.data(forKey: Keys.events),
+              let decoded = try? JSONDecoder().decode([FireEvent].self, from: data) else {
+            return []
+        }
+        return decoded
     }
 
     private func ring(_ schedule: AlarmSchedule, at time: TimeInterval) {
@@ -470,11 +509,6 @@ final class StopwatchController {
     }
 
     // MARK: - 背景行為
-
-    private func applyIdleTimer() {
-        // 碼表執行時不讓螢幕自動鎖定：鎖定後就只能靠通知響鈴，前景的連響與畫面提示都會失效。
-        UIApplication.shared.isIdleTimerDisabled = isRunning
-    }
 
     func handleScenePhase(_ phase: ScenePhase) {
         switch phase {

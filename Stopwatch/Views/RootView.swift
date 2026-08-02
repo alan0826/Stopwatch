@@ -154,12 +154,9 @@ struct RootView: View {
                                 nextFireDate: controller.nextFireDate(for: schedule),
                                 elapsed: controller.elapsed,
                                 isWaiting: controller.armedFirstFire != nil,
-                                firedCount: controller.firedCount(for: schedule))
-                    { enabled in
-                        controller.setEnabled(enabled, for: schedule)
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture { editingSchedule = schedule }
+                                firedCount: controller.firedCount(for: schedule),
+                                onTap: { editingSchedule = schedule },
+                                onToggle: { controller.setEnabled($0, for: schedule) })
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             controller.delete(schedule)
@@ -219,7 +216,7 @@ struct RootView: View {
                                 .foregroundStyle(.secondary)
                                 .accessibilityLabel("由背景通知送達")
                         }
-                        Text(TimeFormat.clock(event.at))
+                        Text(TimeFormat.timeOfDay(event.firedAt))
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
@@ -278,6 +275,7 @@ private struct ScheduleRow: View {
     /// 還在等第一次響鈴：這時候顯示時鐘時刻比顯示碼表倒數有意義。
     let isWaiting: Bool
     let firedCount: Int
+    let onTap: () -> Void
     let onToggle: (Bool) -> Void
 
     private var soundName: String {
@@ -285,6 +283,21 @@ private struct ScheduleRow: View {
     }
 
     var body: some View {
+        HStack(spacing: 12) {
+            // 開關必須留在可點擊區域之外：整列都吃點擊的話，點開關會變成打開編輯頁，
+            // 而編輯頁裡並沒有啟用／停用的選項，等於整個關不掉。
+            content
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onTap)
+
+            Toggle("", isOn: Binding(get: { schedule.isEnabled }, set: onToggle))
+                .labelsHidden()
+        }
+        .padding(.vertical, 4)
+        .opacity(schedule.isEnabled ? 1 : 0.55)
+    }
+
+    private var content: some View {
         HStack(spacing: 12) {
             Capsule()
                 .fill(Palette.color(at: schedule.colorIndex))
@@ -314,33 +327,25 @@ private struct ScheduleRow: View {
 
             Spacer(minLength: 8)
 
-            VStack(alignment: .trailing, spacing: 4) {
-                if schedule.isEnabled, isWaiting {
-                    Text(schedule.firstTimeText)
-                        .font(.callout.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(Palette.color(at: schedule.colorIndex))
-                } else if schedule.isEnabled, let nextFire {
-                    // 還要等一小時以上就直接寫時刻，不然會出現「23:53:42」這種讀不出意思的倒數。
-                    let remaining = max(nextFire - elapsed, 0)
-                    Text(remaining >= 3600 && nextFireDate != nil
-                         ? TimeFormat.timeOfDay(nextFireDate!)
-                         : TimeFormat.clock(remaining))
-                        .font(.callout.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(Palette.color(at: schedule.colorIndex))
-                } else if schedule.isEnabled {
-                    Text("已完成")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Toggle("", isOn: Binding(get: { schedule.isEnabled }, set: onToggle))
-                    .labelsHidden()
-                    .scaleEffect(0.85)
+            if schedule.isEnabled, isWaiting {
+                Text(schedule.firstTimeText)
+                    .font(.callout.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Palette.color(at: schedule.colorIndex))
+            } else if schedule.isEnabled, let nextFire {
+                // 還要等一小時以上就直接寫時刻，不然會出現「23:53:42」這種讀不出意思的倒數。
+                let remaining = max(nextFire - elapsed, 0)
+                Text(remaining >= 3600 && nextFireDate != nil
+                     ? TimeFormat.timeOfDay(nextFireDate!)
+                     : TimeFormat.clock(remaining))
+                    .font(.callout.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Palette.color(at: schedule.colorIndex))
+            } else if schedule.isEnabled {
+                Text("已完成")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 4)
-        .opacity(schedule.isEnabled ? 1 : 0.55)
     }
 }

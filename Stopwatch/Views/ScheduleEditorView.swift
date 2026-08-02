@@ -79,6 +79,17 @@ struct ScheduleEditorView: View {
                             Text("不設定的話會一直重複，直到你暫停或重置碼表。")
                         }
                     }
+
+                }
+
+                Section {
+                    Toggle("每天重複", isOn: $schedule.repeatsDaily)
+                        .onChange(of: schedule.repeatsDaily) { _, on in
+                            // 會重複又沒有結束時間的話，這一輪永遠跑不完，也就輪不到隔天。
+                            if on, schedule.repeats { schedule.hasEnd = true }
+                        }
+                } footer: {
+                    Text(dailyFooter)
                 }
 
                 Section("鈴聲") {
@@ -143,6 +154,16 @@ struct ScheduleEditorView: View {
 
     private var isValid: Bool {
         !(schedule.repeats && schedule.interval < 1)
+    }
+
+    private var dailyFooter: String {
+        guard schedule.repeatsDaily else {
+            return "只跑這一輪。之後要再用，按「重置」重新等待。"
+        }
+        let time = TimeFormat.timeOfDay(firstTime)
+        return schedule.repeats
+            ? "一輪響完之後，隔天 \(time) 再來一輪。需要設定結束時間，這一輪才有結束的時候。"
+            : "每天 \(time) 響一次。"
     }
 
     private var intervalFooter: String {
