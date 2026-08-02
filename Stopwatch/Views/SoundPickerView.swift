@@ -18,14 +18,21 @@ struct SoundPickerView: View {
                 } header: {
                     Text(category.rawValue)
                 } footer: {
-                    if category == SoundCatalog.availableCategories.last {
-                        Text("這些都是 iOS 內建的 Apple 官方音效，App 本身沒有夾帶任何鈴聲檔。點一下即可試聽。")
-                    }
+                    Text(footer(for: category))
                 }
             }
         }
         .navigationTitle("鈴聲")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func footer(for category: SoundCategory) -> String {
+        switch category {
+        case .builtin:
+            return "隨 App 附帶的音效，可以連響、鎖定螢幕時的通知也會用同一顆。點一下即可試聽。"
+        case .system:
+            return "由系統播放的內建提示音。App 在背景時，通知會改用系統預設提示音。"
+        }
     }
 
     private func row(for option: SoundOption) -> some View {
@@ -44,7 +51,8 @@ struct SoundPickerView: View {
                     }
                 }
                 Spacer()
-                if soundID == option.id {
+                // 舊版存下來的鈴聲代號可能已不存在，用解析後的結果比對才不會整份都沒打勾。
+                if SoundCatalog.resolved(id: soundID)?.id == option.id {
                     Image(systemName: "checkmark")
                         .font(.body.weight(.semibold))
                         .foregroundStyle(Color.accentColor)

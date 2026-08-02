@@ -16,17 +16,9 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    Toggle("背景持續運作", isOn: $controller.keepAliveInBackground)
-                } header: {
-                    Text("背景響鈴")
-                } footer: {
-                    Text(controller.keepAliveInBackground
-                         ? "App 會在背景維持一段無聲音軌，鎖定螢幕時也由 App 自己準時響鈴，鈴聲與連響次數完全照設定。比較耗電。"
-                         : "切到背景時改用系統通知響鈴，最多預先排 58 次提醒，回到 App 會自動補排。省電，但每次只會響一聲。")
-                }
-
-                Section {
                     Toggle("碼表執行時不自動鎖定螢幕", isOn: $controller.keepScreenOn)
+                } footer: {
+                    Text("切到背景時改用系統通知響鈴，最多預先排 58 次提醒，回到 App 會自動補排。")
                 }
 
                 Section {
@@ -44,7 +36,7 @@ struct SettingsView: View {
                         }
                     }
                 } footer: {
-                    Text("關閉「背景持續運作」時，背景響鈴要靠通知權限才會出聲。")
+                    Text("App 在背景時要靠通知權限才會出聲。")
                 }
             }
             .navigationTitle("設定")

@@ -58,14 +58,6 @@ final class StopwatchController {
 
     // MARK: - 設定
 
-    /// 背景持續運作（無聲音軌保活）。開啟時由 App 自己準時響鈴；關閉時改用本地通知。
-    var keepAliveInBackground: Bool {
-        didSet {
-            UserDefaults.standard.set(keepAliveInBackground, forKey: Keys.keepAlive)
-            applyKeepAlive()
-        }
-    }
-
     /// 碼表執行時不讓螢幕自動鎖定。
     var keepScreenOn: Bool {
         didSet {
@@ -80,7 +72,6 @@ final class StopwatchController {
 
     private enum Keys {
         static let schedules = "schedules.v1"
-        static let keepAlive = "settings.keepAliveInBackground"
         static let keepScreenOn = "settings.keepScreenOn"
     }
 
@@ -93,7 +84,6 @@ final class StopwatchController {
 
     init() {
         let defaults = UserDefaults.standard
-        keepAliveInBackground = defaults.bool(forKey: Keys.keepAlive)
         keepScreenOn = defaults.object(forKey: Keys.keepScreenOn) as? Bool ?? true
         schedules = Self.loadSchedules()
     }
@@ -112,7 +102,6 @@ final class StopwatchController {
         displayNow = Date()
 
         startTicker()
-        applyKeepAlive()
         applyIdleTimer()
     }
 
@@ -124,7 +113,6 @@ final class StopwatchController {
         displayNow = Date()
 
         stopTicker()
-        SoundPlayer.shared.stopKeepAlive()
         cancelPendingNotifications()
         applyIdleTimer()
     }
@@ -139,7 +127,6 @@ final class StopwatchController {
         events.removeAll()
         flash = nil
 
-        SoundPlayer.shared.stopKeepAlive()
         SoundPlayer.shared.stopAll()
         cancelPendingNotifications()
         applyIdleTimer()
@@ -301,14 +288,6 @@ final class StopwatchController {
 
     // MARK: - 背景行為
 
-    private func applyKeepAlive() {
-        if keepAliveInBackground, isRunning {
-            SoundPlayer.shared.startKeepAlive()
-        } else {
-            SoundPlayer.shared.stopKeepAlive()
-        }
-    }
-
     private func applyIdleTimer() {
         UIApplication.shared.isIdleTimerDisabled = keepScreenOn && isRunning
     }
@@ -321,7 +300,7 @@ final class StopwatchController {
             refreshNotificationStatus()
             if isRunning { tick() }   // 補登在背景期間響過的提醒
         case .background:
-            if isRunning && !keepAliveInBackground {
+            if isRunning {
                 scheduleBackgroundNotifications()
             }
         default:
