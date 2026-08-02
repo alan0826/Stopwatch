@@ -35,7 +35,7 @@ struct RootView: View {
                 .listStyle(.insetGrouped)
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("碼表提醒")
+            .navigationTitle("循環提醒")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

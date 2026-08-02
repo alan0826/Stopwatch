@@ -5,10 +5,14 @@
 
 import SwiftUI
 
-/// 仿內建「時鐘」App 的分頁配置，最後多一頁是原本的碼表提醒。
+/// 分頁配置。「循環提醒」是這個 App 的主功能，也是內建「時鐘」做不到的事，
+/// 所以放在第一頁；鬧鐘／碼錶／計時器是附帶的常用工具。
 struct ClockTabView: View {
     var body: some View {
         TabView {
+            Tab("循環提醒", systemImage: "bell.badge.fill") {
+                RootView()
+            }
             Tab("鬧鐘", systemImage: "alarm.fill") {
                 AlarmsView()
             }
@@ -17,9 +21,6 @@ struct ClockTabView: View {
             }
             Tab("計時器", systemImage: "timer") {
                 CountdownTimerView()
-            }
-            Tab("提醒", systemImage: "bell.badge.fill") {
-                RootView()
             }
         }
     }
