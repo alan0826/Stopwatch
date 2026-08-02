@@ -10,7 +10,6 @@ struct RootView: View {
 
     @State private var editingSchedule: AlarmSchedule?
     @State private var draftSchedule: AlarmSchedule?
-    @State private var showSettings = false
 
     var body: some View {
         NavigationStack {
@@ -38,14 +37,6 @@ struct RootView: View {
             .navigationTitle("循環提醒")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("設定")
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         draftSchedule = newSchedule()
@@ -66,9 +57,6 @@ struct RootView: View {
                 ScheduleEditorView(schedule: schedule, isNew: true) { created in
                     controller.addSchedule(created)
                 }
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
             }
             .overlay(alignment: .top) {
                 flashBanner

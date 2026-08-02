@@ -56,23 +56,12 @@ final class StopwatchController {
         let at: TimeInterval
     }
 
-    // MARK: - 設定
-
-    /// 碼表執行時不讓螢幕自動鎖定。
-    var keepScreenOn: Bool {
-        didSet {
-            UserDefaults.standard.set(keepScreenOn, forKey: Keys.keepScreenOn)
-            applyIdleTimer()
-        }
-    }
-
     private(set) var notificationStatus: UNAuthorizationStatus = .notDetermined
 
     // MARK: - 內部狀態
 
     private enum Keys {
         static let schedules = "schedules.v1"
-        static let keepScreenOn = "settings.keepScreenOn"
     }
 
     private var ticker: Timer?
@@ -83,8 +72,6 @@ final class StopwatchController {
     private let maxScheduledNotifications = 58
 
     init() {
-        let defaults = UserDefaults.standard
-        keepScreenOn = defaults.object(forKey: Keys.keepScreenOn) as? Bool ?? true
         schedules = Self.loadSchedules()
     }
 
@@ -289,7 +276,8 @@ final class StopwatchController {
     // MARK: - 背景行為
 
     private func applyIdleTimer() {
-        UIApplication.shared.isIdleTimerDisabled = keepScreenOn && isRunning
+        // 碼表執行時不讓螢幕自動鎖定：鎖定後就只能靠通知響鈴，前景的連響與畫面提示都會失效。
+        UIApplication.shared.isIdleTimerDisabled = isRunning
     }
 
     func handleScenePhase(_ phase: ScenePhase) {
