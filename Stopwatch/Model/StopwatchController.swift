@@ -100,9 +100,12 @@ final class StopwatchController {
     private var flashResetWorkItem: DispatchWorkItem?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
-    /// 下一次 tick 是不是「從背景回來的補算」。背景期間的提醒已經由通知響過，
-    /// 補算時只補登紀錄、不再出聲。
-    private var isCatchingUp = false
+    /// App 離開前景的時刻。回到前景並補算完才清掉。
+    ///
+    /// 這裡刻意不用「下一次 tick 要補算」這種一次性旗標：排通知的背景任務會讓
+    /// App 進背景後還多活幾秒，那期間計時器照跑，第一個 tick 就把旗標吃掉了，
+    /// 等使用者回來時整批補算就會全部大聲響一遍。
+    private var backgroundedAt: Date?
     private var isInitialised = false
 
     /// 本地通知一次最多只會保留 64 則，這裡預留一些空間。
@@ -155,10 +158,7 @@ final class StopwatchController {
     }
 
     /// 時鐘走到最早一組排程的「第一次響鈴」時刻，碼表自動從 0 開始跑。
-    ///
-    /// `catchingUp` 代表這個時刻是在 App 沒在前景時過掉的：那幾響已經由通知送出，
-    /// 這裡只補登紀錄，不再重複出聲。
-    private func autoStart(at moment: Date, catchingUp: Bool) {
+    private func autoStart(at moment: Date) {
         sessionStart = moment
         armedAnchor = nil
         startedAt = moment
@@ -169,9 +169,7 @@ final class StopwatchController {
         // 第一次響鈴落在碼表的第 0 秒，而 fireTimes 只收「> from」的時間點，
         // 所以起算點要往前挪一點，那一響才不會被跳過。
         let now = preciseElapsed
-        // 起跑時刻已經過去好一段時間，那幾響必然是通知送出的。不管旗標怎麼說都不再出聲，
-        // 免得任何一種喚醒順序都可能讓整批提醒一次全響。
-        fireDueAlarms(from: -1, to: now, catchingUp: catchingUp || now > 2)
+        fireDueAlarms(from: -1, to: now)
         lastCheckedElapsed = now
 
         startTicker()
@@ -274,20 +272,16 @@ final class StopwatchController {
 
         guard isRunning else {
             // 還沒開始：盯著時鐘，到了最早一組排程的時刻就自動起跑。
-            //
-            // 這裡一定要把 isCatchingUp 帶下去。從背景回來時，被凍結的計時器會比
-            // SwiftUI 送出的 .active 更早觸發，寫死 false 的話就會把背景期間
-            // 每一次提醒重新大聲響一遍。
+            // 那一刻是不是已經過去、要不要出聲，由 fireDueAlarms 自己判斷。
             if let anchor = armedAnchor, anchor <= Date() {
-                autoStart(at: anchor, catchingUp: isCatchingUp)
+                autoStart(at: anchor)
             }
             return
         }
 
         let now = preciseElapsed
-        fireDueAlarms(from: lastCheckedElapsed, to: now, catchingUp: isCatchingUp)
+        fireDueAlarms(from: lastCheckedElapsed, to: now)
         lastCheckedElapsed = now
-        isCatchingUp = false
 
         finishRoundIfDone()
     }
@@ -348,7 +342,7 @@ final class StopwatchController {
 
     // MARK: - 響鈴
 
-    private func fireDueAlarms(from: TimeInterval, to now: TimeInterval, catchingUp: Bool) {
+    private func fireDueAlarms(from: TimeInterval, to now: TimeInterval) {
         guard now > from else { return }
 
         var due: [(schedule: AlarmSchedule, time: TimeInterval)] = []
@@ -363,15 +357,26 @@ final class StopwatchController {
         due.sort { $0.time < $1.time }
 
         for item in due {
-            // 只有「剛從背景回來、而且這個時間點確實已經過去」才算是通知響過的，
-            // 這裡不能單看落後多少秒：前景偶爾卡頓也會落後，那時候該響的還是要響。
-            let deliveredByNotification = catchingUp && (now - item.time) > 0.5
+            let deliveredByNotification = wasDeliveredByNotification(lateBy: now - item.time)
             record(item.schedule, at: item.time, missed: deliveredByNotification)
             if !deliveredByNotification {
                 ring(item.schedule, at: item.time)
             }
         }
         persistEvents()
+    }
+
+    /// 這一響是不是已經由系統通知送出了？是的話回到前景就不該再響一次。
+    ///
+    /// 兩個條件任一成立就算：
+    /// 1. 落後超過兩秒。前景時計時器每 1/30 秒就跑一次，落後這麼多必然是
+    ///    App 當時不在前景，也就涵蓋了「被系統終止後重新啟動」這種情況。
+    /// 2. 響鈴的時刻落在 App 離開前景之後。背景剛開始的幾秒 App 其實還活著
+    ///    （排通知的背景任務把它撐著），這時候響的那幾次也是通知在響。
+    private func wasDeliveredByNotification(lateBy: TimeInterval) -> Bool {
+        if lateBy > 2 { return true }
+        guard let backgroundedAt else { return false }
+        return Date().addingTimeInterval(-lateBy) >= backgroundedAt.addingTimeInterval(-0.5)
     }
 
     private func record(_ schedule: AlarmSchedule, at time: TimeInterval, missed: Bool) {
@@ -462,7 +467,7 @@ final class StopwatchController {
             persistRunState()
             return
         }
-        autoStart(at: anchor, catchingUp: true)
+        autoStart(at: anchor)
     }
 
     /// 這組排程的第一次響鈴落在碼表的第幾秒。
@@ -560,11 +565,11 @@ final class StopwatchController {
             catchUpArmedStartIfNeeded()   // 背景期間可能已經走到第一次響鈴的時刻
             startTicker()
             if isRunning { tick() }       // 補登在背景期間響過的提醒
-            isCatchingUp = false
+            backgroundedAt = nil
             // 碼表暫停時計時器是停的，響完的排程不會有機會被關掉，這裡補一次。
             retireFinishedSchedules()
         case .background:
-            isCatchingUp = true
+            backgroundedAt = Date()
             scheduleBackgroundNotifications()
         default:
             break
