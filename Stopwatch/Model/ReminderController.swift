@@ -23,7 +23,6 @@ final class ReminderController {
         didSet {
             guard isInitialised, schedules != oldValue else { return }
             persistSchedules()
-            startTicker()
         }
     }
 
@@ -89,9 +88,10 @@ final class ReminderController {
     // MARK: - 計時
 
     /// 畫面上的時鐘只到秒，每秒跑一次就夠了。
+    ///
+    /// 不管有沒有啟用的排程都要跑：那個時鐘是一直在走的，不能因為沒排程就凍住。
     private func startTicker() {
         stopTicker()
-        guard schedules.contains(where: \.isEnabled) else { return }
 
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             guard let self else { return }
