@@ -69,7 +69,10 @@ final class ReminderController {
         lastCheckedAt = UserDefaults.standard.object(forKey: Keys.lastChecked) as? Date ?? Date()
         isInitialised = true
 
-        normalizeCycles()
+        // 這裡只補上還沒安排的那一輪，不收掉已經跑完的。
+        // 收尾要等 handleLaunch() 補登完紀錄之後才做，否則 App 關著期間跑完的那一輪
+        // 會先被停用，接著補登時就找不到啟用中的排程，那幾次響鈴等於憑空消失。
+        normalizeCycles(retiringFinished: false)
         persistSchedules()
     }
 
@@ -117,7 +120,9 @@ final class ReminderController {
     // MARK: - 每一輪的起點
 
     /// 幫還沒安排的排程排上這一輪，並把已經跑完的一輪推到隔天或直接關掉。
-    private func normalizeCycles() {
+    ///
+    /// `retiringFinished` 為 false 時只做前半段 —— 補登紀錄之前不能先把排程收掉。
+    private func normalizeCycles(retiringFinished: Bool = true) {
         let moment = Date()
         var updated = schedules
         var changed = false
@@ -142,7 +147,9 @@ final class ReminderController {
             }
 
             // 這一輪還有下一次就不用動。
-            guard schedule.nextFireDate(cycleStart: start, after: moment) == nil else { continue }
+            guard retiringFinished,
+                  schedule.nextFireDate(cycleStart: start, after: moment) == nil
+            else { continue }
 
             if schedule.repeatsDaily {
                 schedule.cycleStart = schedule.firstFireDate(onOrAfter: moment)
