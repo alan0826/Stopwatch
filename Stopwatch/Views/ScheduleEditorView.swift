@@ -55,7 +55,7 @@ struct ScheduleEditorView: View {
                 } header: {
                     Text("第一次響鈴")
                 } footer: {
-                    Text("時鐘走到 \(TimeFormat.timeOfDay(firstTime)) 時響第一次，碼表也從這一刻開始計時。")
+                    Text("時鐘走到 \(TimeFormat.timeOfDay(firstTime)) 時響第一次。")
                 }
 
                 if schedule.repeats {
@@ -76,7 +76,7 @@ struct ScheduleEditorView: View {
                         if schedule.hasEnd {
                             Text("第一次響鈴之後再過 \(TimeFormat.duration(schedule.endAt)) 就不再響。")
                         } else {
-                            Text("不設定的話會一直重複，直到你暫停或重置碼表。")
+                            Text("不設定的話會一直重複，直到你把這組提醒關掉。")
                         }
                     }
 
@@ -158,7 +158,7 @@ struct ScheduleEditorView: View {
 
     private var dailyFooter: String {
         guard schedule.repeatsDaily else {
-            return "只跑這一輪。之後要再用，按「重置」重新等待。"
+            return "只跑這一輪，響完就自動關閉。"
         }
         let time = TimeFormat.timeOfDay(firstTime)
         return schedule.repeats
@@ -168,7 +168,7 @@ struct ScheduleEditorView: View {
 
     private var intervalFooter: String {
         guard schedule.interval >= 1 else { return "間隔至少要 1 秒。" }
-        // 用時鐘時刻列出接下來幾次，比「碼表第幾秒」直觀。
+        // 直接列出接下來幾次的時刻，比只寫間隔直觀。
         let times = (1...3).map {
             TimeFormat.timeOfDay(firstTime.addingTimeInterval(Double($0) * schedule.interval))
         }

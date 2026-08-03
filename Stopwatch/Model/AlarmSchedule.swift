@@ -7,16 +7,16 @@ import Foundation
 
 /// 一組提醒排程。
 ///
-/// 第一次響鈴是**時鐘時刻**（例如 14:30）；碼表就在那一刻從 0 開始跑，
-/// 之後的重複與結束時間都以「碼表已跑的秒數」為基準。
-/// 多組排程可以同時存在、互相疊加，共用同一個碼表時間軸。
+/// 時間全部以時鐘為準：第一次響鈴是某個時刻（例如 14:30），之後每隔 `interval` 響一次，
+/// 距離第一次超過 `endAt` 就結束這一輪。設了「每天重複」就隔天同一時刻再來一輪，
+/// 沒設的話跑完就把自己關掉。
 struct AlarmSchedule: Identifiable, Codable, Hashable {
     var id = UUID()
     /// 顯示用標籤，例如「每 5 分鐘」
     var label = ""
     var isEnabled = true
 
-    /// 第一次響鈴的時鐘時刻
+    /// 第一次響鈴的時刻
     var firstHour = 9
     var firstMinute = 0
 
@@ -26,10 +26,9 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
     var interval: TimeInterval = 300
     /// 是否有結束時間
     var hasEnd = false
-    /// 停止重複的碼表秒數（從第一次響鈴起算）
+    /// 距離第一次響鈴多久之後就不再響（秒）
     var endAt: TimeInterval = 3600
     /// 一輪跑完之後，隔天同一個時刻再來一輪。
-    /// 需要搭配結束時間，否則這一輪永遠不會結束，也就輪不到隔天。
     var repeatsDaily = false
 
     /// 鈴聲識別碼，對應 `SoundCatalog`
@@ -37,6 +36,12 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
     /// 每次提醒連響幾聲
     var chimeCount = 1
     var colorIndex = 0
+
+    /// 這一輪第一次響鈴的絕對時刻。
+    ///
+    /// 啟用時決定，跑完之後換到隔天或直接關掉。存起來是因為使用者多半會關掉 App
+    /// 等它響，回來時得知道「這一輪是從哪個時刻算起的」，而不是重新算成明天。
+    var cycleStart: Date?
 
     init() {}
 
@@ -59,6 +64,7 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
         soundID = try container.decodeIfPresent(String.self, forKey: .soundID) ?? fallback.soundID
         chimeCount = try container.decodeIfPresent(Int.self, forKey: .chimeCount) ?? fallback.chimeCount
         colorIndex = try container.decodeIfPresent(Int.self, forKey: .colorIndex) ?? fallback.colorIndex
+        cycleStart = try container.decodeIfPresent(Date.self, forKey: .cycleStart)
     }
 
     /// 新排程的預設時刻：往後推到下一個 5 分整。
@@ -90,7 +96,7 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
         repeats ? "每 \(TimeFormat.duration(interval))" : "\(firstTimeText) 提醒"
     }
 
-    /// 排程摘要，例如「14:30 第一次 · 每 5 分 · 到 30:00 為止」
+    /// 排程摘要，例如「14:30 第一次 · 每 5 分 · 持續 1 小時 · 每天」
     var summary: String {
         var parts = ["\(firstTimeText) 第一次"]
         if repeats {
@@ -103,7 +109,7 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
         return parts.joined(separator: " · ")
     }
 
-    // MARK: - 第一次響鈴
+    // MARK: - 響鈴時刻
 
     /// `date` 之後（含當下這一秒）最近一次符合設定時刻的絕對時間。
     func firstFireDate(onOrAfter date: Date) -> Date? {
@@ -112,60 +118,78 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
                                   matchingPolicy: .nextTime)
     }
 
-    /// 這組排程在碼表時間軸上的第一次響鈴秒數。
-    ///
-    /// 碼表從 `stopwatchStart` 開始跑，所以「比碼表起跑還早的時刻」要算到隔天，
-    /// 這正是 `firstFireDate(onOrAfter:)` 的行為。
-    func firstFireElapsed(stopwatchStart: Date) -> TimeInterval {
-        guard let date = firstFireDate(onOrAfter: stopwatchStart) else { return 0 }
-        return max(date.timeIntervalSince(stopwatchStart), 0)
+    /// 這一輪最後一次響鈴的時刻。`nil` 代表沒有盡頭（重複但沒設結束時間）。
+    private func cycleEnd(from start: Date) -> Date? {
+        guard repeats, interval >= 1 else { return start }
+        guard hasEnd else { return nil }
+        let steps = (endAt / interval).rounded(.down)
+        return start.addingTimeInterval(steps * interval)
     }
 
-    // MARK: - 響鈴時間計算
-
-    /// 這組排程在 `(from, through]` 這段碼表區間內所有的響鈴時間點。
-    func fireTimes(firstFire: TimeInterval,
-                   after from: TimeInterval,
-                   through upperBound: TimeInterval) -> [TimeInterval] {
-        guard isEnabled, upperBound > from else { return [] }
+    /// 這一輪在 `(after, through]` 之間的所有響鈴時刻。
+    func fireDates(cycleStart start: Date, after: Date, through: Date) -> [Date] {
+        guard isEnabled, through > after else { return [] }
 
         guard repeats, interval >= 1 else {
-            return (firstFire > from && firstFire <= upperBound) ? [firstFire] : []
+            return (start > after && start <= through) ? [start] : []
         }
 
-        let limit = hasEnd ? min(upperBound, firstFire + endAt) : upperBound
-        guard limit >= firstFire else { return [] }
-
-        var times: [TimeInterval] = []
-        var step = max(0, Int(((from - firstFire) / interval).rounded(.down)) + 1)
-        while times.count < 2000 {
-            let time = firstFire + Double(step) * interval
-            if time > limit { break }
-            if time > from { times.append(time) }
+        let last = cycleEnd(from: start)
+        var result: [Date] = []
+        var step = max(0, Int((after.timeIntervalSince(start) / interval).rounded(.down)) + 1)
+        while result.count < 2000 {
+            let fire = start.addingTimeInterval(Double(step) * interval)
+            if let last, fire > last { break }
+            if fire > through { break }
+            if fire > after { result.append(fire) }
             step += 1
         }
-        return times
+        return result
     }
 
-    /// 碼表跑到 `time` 之後，接下來的幾次響鈴時間點。
-    func upcomingFireTimes(firstFire: TimeInterval,
-                           after time: TimeInterval,
-                           limit: Int) -> [TimeInterval] {
+    /// 這一輪在 `date` 之後的下一次響鈴。`nil` 代表這一輪跑完了。
+    func nextFireDate(cycleStart start: Date, after date: Date) -> Date? {
+        guard isEnabled else { return nil }
+
+        guard repeats, interval >= 1 else {
+            return start > date ? start : nil
+        }
+
+        let last = cycleEnd(from: start)
+        var step = max(0, Int((date.timeIntervalSince(start) / interval).rounded(.down)) + 1)
+        while step < 100_000 {
+            let fire = start.addingTimeInterval(Double(step) * interval)
+            if let last, fire > last { return nil }
+            if fire > date { return fire }
+            step += 1
+        }
+        return nil
+    }
+
+    /// `date` 之後接下來幾次響鈴。設了「每天重複」就會跨到之後的每一輪。
+    func upcomingFireDates(cycleStart start: Date, after date: Date, limit: Int) -> [Date] {
         guard isEnabled, limit > 0 else { return [] }
 
-        guard repeats, interval >= 1 else {
-            return firstFire > time ? [firstFire] : []
-        }
+        var result: [Date] = []
+        var cycle = start
+        var cursor = date
+        var extraCycles = 0
 
-        var times: [TimeInterval] = []
-        var step = max(0, Int(((time - firstFire) / interval).rounded(.down)) + 1)
-        while times.count < limit {
-            let fire = firstFire + Double(step) * interval
-            if hasEnd, fire > firstFire + endAt { break }
-            if fire > time { times.append(fire) }
-            step += 1
+        while result.count < limit, extraCycles <= 60 {
+            if let next = nextFireDate(cycleStart: cycle, after: cursor) {
+                result.append(next)
+                cursor = next
+                continue
+            }
+            // 這一輪沒了，看看要不要接到隔天那一輪。
+            guard repeatsDaily,
+                  let nextCycle = Calendar.current.date(byAdding: .day, value: 1, to: cycle)
+            else { break }
+            cycle = nextCycle
+            cursor = cycle.addingTimeInterval(-1)
+            extraCycles += 1
         }
-        return times
+        return result
     }
 }
 
@@ -174,11 +198,9 @@ struct FireEvent: Identifiable, Hashable, Codable {
     var id = UUID()
     var scheduleID: UUID
     var label: String
-    /// 響鈴時碼表的秒數
-    var at: TimeInterval
-    /// 響鈴時的實際時刻，跨越好幾輪之後這個才讀得出意思
+    /// 響鈴的實際時刻
     var firedAt: Date
     var colorIndex: Int
-    /// true 代表 App 當時在背景，由系統通知送達（回到前景才補登紀錄）
+    /// true 代表 App 當時不在前景，由系統通知送達（回到前景才補登紀錄）
     var deliveredInBackground: Bool
 }

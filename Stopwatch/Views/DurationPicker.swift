@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// 時 / 分 / 秒三欄滾輪，用來輸入碼表上的秒數。
+/// 時 / 分 / 秒三欄滾輪，用來輸入一段長度。
 struct DurationPicker: View {
     @Binding var seconds: TimeInterval
     var maxHours = 23

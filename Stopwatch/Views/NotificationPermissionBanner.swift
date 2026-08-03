@@ -9,7 +9,7 @@ import UIKit
 /// 通知權限被拒時的提示。背景響鈴完全靠通知，關掉了就會安靜地失效，
 /// 所以這件事必須在主畫面上講明白，而不是只放在設定頁裡。
 struct NotificationPermissionBanner: View {
-    @Environment(StopwatchController.self) private var controller
+    @Environment(ReminderController.self) private var controller
 
     var body: some View {
         if controller.notificationStatus == .denied {
