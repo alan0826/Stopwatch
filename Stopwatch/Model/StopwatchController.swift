@@ -288,16 +288,34 @@ final class StopwatchController {
         lastCheckedElapsed = now
         isCatchingUp = false
 
-        retireFinishedSchedules()
-        rearmForTomorrowIfFinished()
+        finishRoundIfDone()
+    }
+
+    /// 這一輪沒有下一次響鈴了，做收尾。
+    ///
+    /// 有排程設了「每天重複」就收掉碼表、重新等隔天；否則把響完的排程關掉，
+    /// 並讓碼表停在最後的數字上。
+    private func finishRoundIfDone() {
+        guard nextFire == nil else { return }
+
+        if schedules.contains(where: { $0.isEnabled && $0.repeatsDaily }) {
+            rearmForTomorrow()
+            return
+        }
+
+        // 只有「真的有排程剛響完」才停碼表。少了這個條件，使用者在沒有啟用
+        // 任何排程的情況下按「開始」，碼表會在下一個 tick 就被停掉。
+        guard retireFinishedSchedules(), isRunning else { return }
+        pause()
     }
 
     /// 沒有設定「每天重複」的排程，響完最後一次之後就把開關關掉。
     /// 不關的話它會一直停在「已完成」但開關還是開著，看起來像還會再響。
-    private func retireFinishedSchedules() {
+    @discardableResult
+    private func retireFinishedSchedules() -> Bool {
         guard sessionStart != nil,
               schedules.contains(where: { $0.isEnabled && !$0.repeatsDaily && nextFireTime(for: $0) == nil })
-        else { return }
+        else { return false }
 
         var updated = schedules
         for index in updated.indices where updated[index].isEnabled && !updated[index].repeatsDaily {
@@ -306,15 +324,11 @@ final class StopwatchController {
             }
         }
         schedules = updated
+        return true
     }
 
-    /// 這一輪的排程全部響完了，而且有排程設了「每天重複」—— 收掉碼表，等隔天再來一輪。
-    /// 紀錄保留，只有使用者按重置才會清空。
-    private func rearmForTomorrowIfFinished() {
-        guard nextFire == nil,
-              schedules.contains(where: { $0.isEnabled && $0.repeatsDaily })
-        else { return }
-
+    /// 收掉碼表，等隔天再來一輪。紀錄保留，只有使用者按重置才會清空。
+    private func rearmForTomorrow() {
         stopTicker()
         isRunning = false
         startedAt = nil
