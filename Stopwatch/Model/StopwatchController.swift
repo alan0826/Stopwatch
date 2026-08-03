@@ -168,7 +168,9 @@ final class StopwatchController {
         // 第一次響鈴落在碼表的第 0 秒，而 fireTimes 只收「> from」的時間點，
         // 所以起算點要往前挪一點，那一響才不會被跳過。
         let now = preciseElapsed
-        fireDueAlarms(from: -1, to: now, catchingUp: catchingUp)
+        // 起跑時刻已經過去好一段時間，那幾響必然是通知送出的。不管旗標怎麼說都不再出聲，
+        // 免得任何一種喚醒順序都可能讓整批提醒一次全響。
+        fireDueAlarms(from: -1, to: now, catchingUp: catchingUp || now > 2)
         lastCheckedElapsed = now
 
         startTicker()
@@ -271,8 +273,12 @@ final class StopwatchController {
 
         guard isRunning else {
             // 還沒開始：盯著時鐘，到了最早一組排程的時刻就自動起跑。
+            //
+            // 這裡一定要把 isCatchingUp 帶下去。從背景回來時，被凍結的計時器會比
+            // SwiftUI 送出的 .active 更早觸發，寫死 false 的話就會把背景期間
+            // 每一次提醒重新大聲響一遍。
             if let anchor = armedAnchor, anchor <= Date() {
-                autoStart(at: anchor, catchingUp: false)
+                autoStart(at: anchor, catchingUp: isCatchingUp)
             }
             return
         }
@@ -282,7 +288,24 @@ final class StopwatchController {
         lastCheckedElapsed = now
         isCatchingUp = false
 
+        retireFinishedSchedules()
         rearmForTomorrowIfFinished()
+    }
+
+    /// 沒有設定「每天重複」的排程，響完最後一次之後就把開關關掉。
+    /// 不關的話它會一直停在「已完成」但開關還是開著，看起來像還會再響。
+    private func retireFinishedSchedules() {
+        guard sessionStart != nil,
+              schedules.contains(where: { $0.isEnabled && !$0.repeatsDaily && nextFireTime(for: $0) == nil })
+        else { return }
+
+        var updated = schedules
+        for index in updated.indices where updated[index].isEnabled && !updated[index].repeatsDaily {
+            if nextFireTime(for: updated[index]) == nil {
+                updated[index].isEnabled = false
+            }
+        }
+        schedules = updated
     }
 
     /// 這一輪的排程全部響完了，而且有排程設了「每天重複」—— 收掉碼表，等隔天再來一輪。

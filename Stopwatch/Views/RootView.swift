@@ -106,10 +106,11 @@ struct RootView: View {
                 Text("下一次 \(next.schedule.displayLabel) · 還有 \(TimeFormat.clock(remaining))")
                     .monospacedDigit()
             }
-        } else if controller.schedules.contains(where: { $0.isEnabled }) {
-            Text("所有提醒都已響完")
-        } else {
+        } else if controller.schedules.isEmpty {
             Text("尚未設定提醒")
+        } else {
+            // 響完的排程會自己關掉，這時候排程還在、只是都關了，不能說「尚未設定」。
+            Text("提醒都響完了")
         }
     }
 
