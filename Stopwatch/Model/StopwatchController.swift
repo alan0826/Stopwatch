@@ -129,6 +129,7 @@ final class StopwatchController {
         requestNotificationPermissionIfNeeded()
 
         catchUpArmedStartIfNeeded()
+        retireFinishedSchedules()
         // 執行中要接回碼表；等待中要盯著時鐘，兩種都需要計時器。
         startTicker()
     }
@@ -291,11 +292,14 @@ final class StopwatchController {
         finishRoundIfDone()
     }
 
-    /// 這一輪沒有下一次響鈴了，做收尾。
+    /// 響完之後的收尾。
     ///
-    /// 有排程設了「每天重複」就收掉碼表、重新等隔天；否則把響完的排程關掉，
-    /// 並讓碼表停在最後的數字上。
+    /// 關開關是**逐組獨立**判斷的：有兩組排程時，先響完的那組要馬上關掉，
+    /// 不能等另一組也結束——否則它會一直停在「已完成」但開關還開著。
+    /// 整輪都沒有下一次了才處理碼表。
     private func finishRoundIfDone() {
+        let retired = retireFinishedSchedules()
+
         guard nextFire == nil else { return }
 
         if schedules.contains(where: { $0.isEnabled && $0.repeatsDaily }) {
@@ -305,7 +309,7 @@ final class StopwatchController {
 
         // 只有「真的有排程剛響完」才停碼表。少了這個條件，使用者在沒有啟用
         // 任何排程的情況下按「開始」，碼表會在下一個 tick 就被停掉。
-        guard retireFinishedSchedules(), isRunning else { return }
+        guard retired, isRunning else { return }
         pause()
     }
 
@@ -557,6 +561,8 @@ final class StopwatchController {
             startTicker()
             if isRunning { tick() }       // 補登在背景期間響過的提醒
             isCatchingUp = false
+            // 碼表暫停時計時器是停的，響完的排程不會有機會被關掉，這裡補一次。
+            retireFinishedSchedules()
         case .background:
             isCatchingUp = true
             scheduleBackgroundNotifications()
