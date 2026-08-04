@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>循環提醒 - 隱私權政策</title>
+<style>
+  :root {
+    --bg: #f2f2f7;
+    --card: #ffffff;
+    --text: #1c1c1e;
+    --secondary: #6e6e73;
+    --accent: #ff9500;
+    --border: #e5e5ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --card: #1c1c1e;
+      --text: #f2f2f7;
+      --secondary: #98989f;
+      --accent: #ff9f0a;
+      --border: #38383a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Helvetica Neue", sans-serif;
+    line-height: 1.7;
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0 0 6px;
+  }
+  .updated {
+    color: var(--secondary);
+    font-size: 14px;
+    margin: 0 0 32px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0 0 10px;
+  }
+  .card p, .card li {
+    font-size: 15px;
+    margin: 0 0 8px;
+  }
+  .card ul { padding-left: 20px; margin: 0; }
+  a.mail {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  a.mail:hover { text-decoration: underline; }
+  footer {
+    text-align: center;
+    color: var(--secondary);
+    font-size: 13px;
+    margin-top: 40px;
+  }
+  footer a { color: var(--secondary); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>隱私權政策</h1>
+    <p class="updated">循環提醒（Cyclic Reminder）· 最後更新：2026 年 8 月</p>
+
+    <div class="card">
+      <h2>簡短版本</h2>
+      <p>本 App 不收集、不傳送、不分享任何個人資料。所有內容都只存在你的裝置上。</p>
+    </div>
+
+    <div class="card">
+      <h2>資料儲存於本機</h2>
+      <p>你建立的提醒排程、鈴聲設定與提醒紀錄，都只透過 iOS 系統的 UserDefaults 儲存在你的裝置本機。這些資料不會被上傳到任何伺服器，App 本身也沒有連接網路的功能。</p>
+    </div>
+
+    <div class="card">
+      <h2>不使用追蹤與分析</h2>
+      <ul>
+        <li>不含任何第三方 SDK 或分析工具</li>
+        <li>不使用 App Tracking Transparency 追蹤</li>
+        <li>不投放廣告</li>
+        <li>不需要註冊帳號或登入</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>系統權限</h2>
+      <p>本 App 會請求「通知」權限，僅用於在 App 離開前景時，準時送出你設定的提醒。此權限完全由你在系統設定中控制，隨時可以關閉。</p>
+    </div>
+
+    <div class="card">
+      <h2>政策異動</h2>
+      <p>若本政策內容有所更新，將直接反映在這個頁面上。</p>
+    </div>
+
+    <div class="card">
+      <h2>聯絡方式</h2>
+      <p>對本政策有任何疑問，歡迎來信：<br>
+      <a class="mail" href="mailto:alan200108@gmail.com">alan200108@gmail.com</a></p>
+    </div>
+
+    <footer>
+      <a href="support.html">支援頁面</a>
+    </footer>
+  </div>
+</body>
+</html>

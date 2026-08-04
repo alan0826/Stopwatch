@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>循環提醒 - 支援</title>
+<style>
+  :root {
+    --bg: #f2f2f7;
+    --card: #ffffff;
+    --text: #1c1c1e;
+    --secondary: #6e6e73;
+    --accent: #ff9500;
+    --border: #e5e5ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --card: #1c1c1e;
+      --text: #f2f2f7;
+      --secondary: #98989f;
+      --accent: #ff9f0a;
+      --border: #38383a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Helvetica Neue", sans-serif;
+    line-height: 1.6;
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+  .icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 18px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 34px;
+    margin-bottom: 20px;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0 0 6px;
+  }
+  .subtitle {
+    color: var(--secondary);
+    font-size: 15px;
+    margin: 0 0 32px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0 0 12px;
+  }
+  .card p {
+    margin: 0 0 10px;
+    font-size: 15px;
+    color: var(--text);
+  }
+  .card p:last-child { margin-bottom: 0; }
+  a.mail {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 16px;
+  }
+  a.mail:hover { text-decoration: underline; }
+  .faq-item {
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+    margin-top: 14px;
+  }
+  .faq-item:first-of-type {
+    border-top: none;
+    padding-top: 0;
+    margin-top: 0;
+  }
+  .faq-q {
+    font-weight: 600;
+    font-size: 15px;
+    margin: 0 0 4px;
+  }
+  .faq-a {
+    color: var(--secondary);
+    font-size: 14px;
+    margin: 0;
+  }
+  footer {
+    text-align: center;
+    color: var(--secondary);
+    font-size: 13px;
+    margin-top: 40px;
+  }
+  footer a { color: var(--secondary); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="icon">⏰</div>
+    <h1>循環提醒</h1>
+    <p class="subtitle">自訂間隔時間的重複提醒工具</p>
+
+    <div class="card">
+      <h2>聯絡我們</h2>
+      <p>使用上遇到問題、有功能建議，或發現任何錯誤，歡迎直接寫信：</p>
+      <a class="mail" href="mailto:alan200108@gmail.com">✉️ alan200108@gmail.com</a>
+    </div>
+
+    <div class="card">
+      <h2>常見問題</h2>
+
+      <div class="faq-item">
+        <p class="faq-q">App 切到背景後，提醒還會響嗎？</p>
+        <p class="faq-a">會。App 進入背景或鎖定螢幕時，會把接下來的響鈴改由系統本地通知送出。請確認已在系統設定中允許本 App 傳送通知。</p>
+      </div>
+
+      <div class="faq-item">
+        <p class="faq-q">開啟專注模式（勿擾模式）時提醒會被消音嗎？</p>
+        <p class="faq-a">不會。本 App 使用「時效性通知」，預設能突破專注模式與勿擾模式送達。若你在系統設定中個別關閉了此權限，則不在此限。</p>
+      </div>
+
+      <div class="faq-item">
+        <p class="faq-q">為什麼背景響了很久之後就沒有通知了？</p>
+        <p class="faq-a">iOS 系統限制每個 App 最多同時預排 64 則本地通知。若排程間隔很短（例如每分鐘一次），背景可持續提醒的時間會有上限；重新打開 App 即可補登期間錯過的紀錄並重新排程。</p>
+      </div>
+
+      <div class="faq-item">
+        <p class="faq-q">提醒紀錄要怎麼清除？</p>
+        <p class="faq-a">在主畫面「提醒紀錄」區塊右上角點「清除」即可。</p>
+      </div>
+
+      <div class="faq-item">
+        <p class="faq-q">App 會收集我的個人資料嗎？</p>
+        <p class="faq-a">不會。詳見 <a href="privacy.html" style="color:var(--accent)">隱私權政策</a>。</p>
+      </div>
+    </div>
+
+    <footer>
+      <a href="privacy.html">隱私權政策</a>
+    </footer>
+  </div>
+</body>
+</html>
