@@ -38,14 +38,24 @@ final class SoundPlayer: NSObject, AVAudioPlayerDelegate {
         Task { @MainActor in SoundPlayer.shared.deactivateSessionIfIdle() }
     }
 
+    nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        Task { @MainActor in SoundPlayer.shared.stopAll() }
+    }
+
     // MARK: - 播放
 
     func play(_ option: SoundOption, times: Int = 1) {
-        activateSession()
         guard let player = player(for: option) else { return }
+
+        // 試聽時可能在上一顆長鈴聲尚未結束前切到下一顆。若讓多個 player 疊播，
+        // 原本乾淨的音效也會混成爆音或雜音，因此任何新播放都先完整停止上一輪。
+        stopPlayers()
+        activateSession()
         player.numberOfLoops = max(times, 1) - 1
         player.currentTime = 0
-        player.play()
+        if !player.play() {
+            deactivateSession()
+        }
     }
 
     /// 試聽（永遠只響一聲）。
@@ -54,10 +64,15 @@ final class SoundPlayer: NSObject, AVAudioPlayerDelegate {
     }
 
     func stopAll() {
-        for player in players.values where player.isPlaying {
-            player.stop()
-        }
+        stopPlayers()
         deactivateSession()
+    }
+
+    private func stopPlayers() {
+        for player in players.values {
+            player.stop()
+            player.currentTime = 0
+        }
     }
 
     private func player(for option: SoundOption) -> AVAudioPlayer? {
@@ -65,7 +80,7 @@ final class SoundPlayer: NSObject, AVAudioPlayerDelegate {
         guard let url = Bundle.main.url(forResource: option.id, withExtension: option.fileExtension),
               let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
         player.delegate = self
-        player.prepareToPlay()
+        // 不預先 prepareToPlay：它會取得音訊資源，閒置快取不應占用通知音訊。
         players[option.id] = player
         return player
     }

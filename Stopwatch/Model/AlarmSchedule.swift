@@ -31,6 +31,10 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
     /// 一輪跑完之後，隔天同一個時刻再來一輪。
     var repeatsDaily = false
 
+    /// iOS 26 以上是否使用會持續響到手動停止的系統鬧鐘。
+    /// 一般單次提醒預設為 false，播完 `chimeCount` 後自動結束。
+    var usesSystemAlarm = false
+
     /// 鈴聲識別碼，對應 `SoundCatalog`
     var soundID = SoundCatalog.defaultID
     /// 每次提醒連響幾聲
@@ -61,6 +65,8 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
         hasEnd = try container.decodeIfPresent(Bool.self, forKey: .hasEnd) ?? fallback.hasEnd
         endAt = try container.decodeIfPresent(TimeInterval.self, forKey: .endAt) ?? fallback.endAt
         repeatsDaily = try container.decodeIfPresent(Bool.self, forKey: .repeatsDaily) ?? fallback.repeatsDaily
+        usesSystemAlarm = try container.decodeIfPresent(Bool.self, forKey: .usesSystemAlarm)
+            ?? fallback.usesSystemAlarm
         soundID = try container.decodeIfPresent(String.self, forKey: .soundID) ?? fallback.soundID
         chimeCount = try container.decodeIfPresent(Int.self, forKey: .chimeCount) ?? fallback.chimeCount
         colorIndex = try container.decodeIfPresent(Int.self, forKey: .colorIndex) ?? fallback.colorIndex
@@ -106,7 +112,21 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
             parts.append("單次")
         }
         if repeatsDaily { parts.append("每天") }
+        if hasAlarmSemantics { parts.append("持續響到停止") }
         return parts.joined(separator: " · ")
+    }
+
+    /// AlarmKit 只用在使用者明確選擇「持續響到停止」的單次／每日鬧鐘。
+    ///
+    /// 「每 N 秒／分鐘」的區間循環是一般提醒，不應為了突破靜音與專注模式
+    /// 而全部包裝成系統鬧鐘。實際是否能用 AlarmKit 仍由 iOS 版本決定。
+    ///
+    /// 同時要求系統支援：iOS 18 上沒有 AlarmKit，這種排程只能退回一般通知，
+    /// 摘要與編輯畫面若還宣稱「持續響到停止」就是在騙人。
+    var hasAlarmSemantics: Bool {
+        guard !repeats, usesSystemAlarm else { return false }
+        if #available(iOS 26.0, *) { return true }
+        return false
     }
 
     // MARK: - 響鈴時刻
@@ -201,6 +221,6 @@ struct FireEvent: Identifiable, Hashable, Codable {
     /// 響鈴的實際時刻
     var firedAt: Date
     var colorIndex: Int
-    /// true 代表 App 當時不在前景，由系統通知送達（回到前景才補登紀錄）
+    /// true 只代表該時刻 App 不在前景；系統是否真的顯示或播放提醒無法由 App 回推。
     var deliveredInBackground: Bool
 }

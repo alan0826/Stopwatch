@@ -32,7 +32,11 @@ enum TimeFormat {
         timeOfDayFormatter.string(from: date)
     }
 
-    /// 含秒的時刻：`14:30:07`，給畫面上那個一直在走的時鐘用。
+    /// 含秒的時刻：`14:30:07`、`14:30:00`。
+    ///
+    /// 秒數剛好是 0 也一樣寫到秒。間隔不是整分鐘時（例如每 90 秒）響鈴會落在
+    /// 半分鐘上，只寫到分鐘的話，連著兩筆紀錄會看起來是同一個時刻；而整分鐘的那幾筆
+    /// 若省略 `:00`，同一份清單裡的時刻長短不一，反而更難對照。
     static func timeOfDayWithSeconds(_ date: Date) -> String {
         withSecondsFormatter.string(from: date)
     }
@@ -47,9 +51,32 @@ enum TimeFormat {
     /// 快到了就寫倒數（`還有 04:25`），還很久就直接寫時刻 —— 一小時以上的倒數讀不出意思。
     static func countdownOrTime(to date: Date, from now: Date) -> String {
         let remaining = date.timeIntervalSince(now)
-        guard remaining < 3600 else { return timeOfDay(date) }
+        guard remaining < 3600 else { return dayQualified(date, from: now) }
         return "還有 \(clock(max(remaining, 0)))"
     }
+
+    /// 不是今天的話要把日子寫出來。
+    ///
+    /// 設定時刻若已經過了，這一輪會自動排到隔天；只寫「21:25」會讓人以為它早就過期不響了。
+    static func dayQualified(_ date: Date, from now: Date = Date()) -> String {
+        let calendar = Calendar.current
+        let time = timeOfDay(date)
+        let days = calendar.dateComponents([.day],
+                                           from: calendar.startOfDay(for: now),
+                                           to: calendar.startOfDay(for: date)).day ?? 0
+        switch days {
+        case ..<1: return time
+        case 1: return "明天 \(time)"
+        default: return "\(dayFormatter.string(from: date)) \(time)"
+        }
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.setLocalizedDateFormatFromTemplate("Md")
+        return formatter
+    }()
 
     private static let timeOfDayFormatter: DateFormatter = {
         let formatter = DateFormatter()

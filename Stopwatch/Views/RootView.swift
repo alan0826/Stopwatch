@@ -28,6 +28,11 @@ struct RootView: View {
                     historySection
                 }
                 .listStyle(.insetGrouped)
+                // 刪掉最後一組排程時，「提醒排程」區段會從幾列排程整塊換成空白提示，
+                // 高度一口氣多出兩百多點。沿用同一個 List 的話，空白提示會立刻以完整
+                // 高度插進去，底下的「提醒紀錄」卻要等刪除動畫跑完才重新定位——實測
+                // 有 0.4 秒兩塊疊在一起。換 id 讓 List 整個重建，版面同一幀到位。
+                .id(controller.schedules.isEmpty)
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("循環提醒")
@@ -46,7 +51,9 @@ struct RootView: View {
                 ScheduleEditorView(schedule: schedule) { updated in
                     controller.update(updated)
                 } onDelete: {
-                    controller.delete(schedule)
+                    removeSchedules(leavingNone: controller.schedules.count == 1) {
+                        controller.delete(schedule)
+                    }
                 }
             }
             .sheet(item: $draftSchedule) { schedule in
@@ -96,8 +103,9 @@ struct RootView: View {
         } else if controller.schedules.isEmpty {
             Text("尚未設定提醒")
         } else {
-            // 響完的排程會自己關掉，這時候排程還在、只是都關了，不能說「尚未設定」。
-            Text("提醒都響完了")
+            // 排程還在、只是都關了（響完會自己關掉，也可能是使用者關的），
+            // 既不能說「尚未設定」，也不能一律說「都響完了」。
+            Text("目前沒有進行中的提醒")
         }
     }
 
@@ -117,7 +125,9 @@ struct RootView: View {
                                 onToggle: { controller.setEnabled($0, for: schedule) })
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
-                            controller.delete(schedule)
+                            removeSchedules(leavingNone: controller.schedules.count == 1) {
+                                controller.delete(schedule)
+                            }
                         } label: {
                             Label("刪除", systemImage: "trash")
                         }
@@ -131,9 +141,28 @@ struct RootView: View {
                         .tint(.blue)
                     }
                 }
-                .onDelete { controller.delete(atOffsets: $0) }
+                .onDelete { offsets in
+                    removeSchedules(leavingNone: offsets.count >= controller.schedules.count) {
+                        controller.delete(atOffsets: offsets)
+                    }
+                }
             }
         }
+    }
+
+    /// 刪除排程。刪到一組都不剩的那一刀不做動畫。
+    ///
+    /// 與 List 上那個 `.id` 是一組的：`.id` 負責讓版面一次重建，這裡負責讓那次重建
+    /// 不要再被套上轉場動畫，否則新舊兩份版面仍會交疊著淡入淡出。只在最後一刀關閉，
+    /// 中間還有排程時照樣保留正常的刪除動畫。
+    private func removeSchedules(leavingNone: Bool, perform: () -> Void) {
+        guard leavingNone else {
+            perform()
+            return
+        }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction, perform)
     }
 
     private var emptyState: some View {
@@ -172,9 +201,9 @@ struct RootView: View {
                             Image(systemName: "bell.badge.fill")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
-                                .accessibilityLabel("由背景通知送達")
+                                .accessibilityLabel("背景期間的排定提醒")
                         }
-                        Text(TimeFormat.timeOfDay(event.firedAt))
+                        Text(TimeFormat.timeOfDayWithSeconds(event.firedAt))
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
@@ -237,6 +266,21 @@ private struct ScheduleRow: View {
         SoundCatalog.resolved(id: schedule.soundID)?.name ?? "預設"
     }
 
+    /// 音效摘要，例如「鐘聲 × 3 · 已響 16 次」。
+    ///
+    /// 「已響 N 次」整串用不斷行字元黏起來。中文可以在任兩個字之間斷行，
+    /// 放著不管的話寬度一不夠，就會看到「已」留在上一行、「響 16 次」掉到下一行。
+    private var soundSummary: String {
+        var text = soundName
+        if schedule.chimeCount > 1 {
+            text += " ×\u{00A0}\(schedule.chimeCount)"
+        }
+        if firedCount > 0 {
+            text += " · 已\u{2060}響\u{00A0}\(firedCount)\u{00A0}次"
+        }
+        return text
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             // 開關必須留在可點擊區域之外：整列都吃點擊的話，點開關會變成打開編輯頁，
@@ -265,16 +309,12 @@ private struct ScheduleRow: View {
                 Text(schedule.summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                HStack(spacing: 4) {
+
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Image(systemName: "speaker.wave.2.fill")
                         .accessibilityHidden(true)
-                    Text(soundName)
-                    if schedule.chimeCount > 1 {
-                        Text("× \(schedule.chimeCount)")
-                    }
-                    if firedCount > 0 {
-                        Text("· 已響 \(firedCount) 次")
-                    }
+                    Text(soundSummary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -282,6 +322,7 @@ private struct ScheduleRow: View {
 
             Spacer(minLength: 8)
 
+            // 倒數與外層開關都位於各自欄位的垂直中央，因此中心線會一致。
             if schedule.isEnabled, let nextFire {
                 Text(TimeFormat.countdownOrTime(to: nextFire, from: now))
                     .font(.callout.weight(.semibold))

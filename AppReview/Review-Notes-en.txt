@@ -1,0 +1,11 @@
+This app is a fully local cyclic reminder utility. It has no account, demo credentials, server, remote configuration, WebView, third-party SDK, advertising, analytics, payment, or hidden/dormant functionality.
+
+Complete review path:
+1. Launch: no reminders exist and no permission prompt appears.
+2. Tap + or “Add Reminder.”
+3. Configure and save the reminder.
+4. Saving the first enabled reminder requests only the system permission required for that reminder, in context. On iOS 26 or later, AlarmKit authorization is requested only if the reviewer explicitly enables "Ring Continuously Until Stopped" on a one-time or daily fixed-time reminder. All finite-chime and interval-based reminders request notification authorization. On iOS 18, all reminders use local notifications.
+5. Edit by tapping a row; enable/disable with the switch; swipe left to delete; swipe right to preview the selected bundled sound.
+6. Delivery history is shown on the main screen.
+
+On iOS 26 or later, AlarmKit is used only when the user explicitly opts into a system alarm that rings continuously until manually stopped. Finite-chime one-time/daily reminders and interval-based cyclic reminders continue to use local notifications with Time Sensitive delivery and do not masquerade as alarms. On iOS 18, all background delivery uses local notifications. In-app sound previews use media volume. Schedules, settings, and history remain on device in UserDefaults. No data leaves the device.

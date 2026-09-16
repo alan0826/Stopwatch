@@ -15,11 +15,14 @@ struct SoundPickerView: View {
                     row(for: option)
                 }
             } footer: {
-                Text("點一下即可試聽。App 在背景或鎖定螢幕時，提醒改由系統通知送出，音量吃的是「設定 → 聲音與觸覺回饋」裡的鈴聲音量，不是媒體音量。")
+                Text("點一下即可試聽，試聽使用媒體音量。背景與鎖定螢幕時改由系統鬧鐘或通知送達，音量由 iOS 控制。")
             }
         }
         .navigationTitle("鈴聲")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            SoundPlayer.shared.stopAll()
+        }
     }
 
     private func row(for option: SoundOption) -> some View {
@@ -46,5 +49,10 @@ struct SoundPickerView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+#Preview {
+    NavigationStack {
+        SoundPickerView(soundID: .constant(""))
     }
 }

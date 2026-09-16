@@ -8,11 +8,20 @@ import Observation
 import SwiftUI
 import UIKit
 import UserNotifications
+import AlarmKit
+import OSLog
+
+enum AlarmPermissionStatus: Equatable {
+    case unavailable
+    case notDetermined
+    case denied
+    case authorized
+}
 
 /// 多組提醒排程的核心邏輯。
 ///
 /// 時間一律以時鐘為準，沒有碼表也沒有「開始／暫停」——每組排程自己的開關就是它的開關。
-/// App 在前景時由自己播鈴聲，切到背景則把接下來的響鈴排成本地通知。
+/// 一般提醒預先排成本地通知，由系統統一播放，避免鎖定切換時漏響。
 @Observable
 final class ReminderController {
 
@@ -39,6 +48,15 @@ final class ReminderController {
     }
 
     private(set) var notificationStatus: UNAuthorizationStatus = .notDetermined
+    private(set) var notificationSettingsLoaded = false
+    private(set) var notificationAlertsEnabled = false
+    private(set) var notificationSoundsEnabled = false
+    private(set) var notificationLockScreenEnabled = false
+    private(set) var notificationTimeSensitiveEnabled = false
+    private(set) var notificationScheduledDeliveryEnabled = false
+    private(set) var alarmPermissionStatus: AlarmPermissionStatus = .unavailable
+    private(set) var notificationSchedulingError: String?
+    private(set) var alarmSchedulingError: String?
 
     // MARK: - 內部狀態
 
@@ -58,6 +76,9 @@ final class ReminderController {
     private var ticker: Timer?
     private var flashResetWorkItem: DispatchWorkItem?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+    private var alarmSchedulingTask: Task<Void, Never>?
+    private var notificationSchedulingTask: Task<Void, Never>?
+    private var isCatchingUpAfterLaunch = false
     private var isInitialised = false
 
     /// 本地通知一次最多只會保留 64 則，這裡預留一些空間。
@@ -78,13 +99,15 @@ final class ReminderController {
 
     /// App 啟動時呼叫。
     func handleLaunch() {
-        // 上一輪排進系統的提醒通知已經沒有意義：前景一律由 App 自己響，
-        // 再次進背景時會重排。
-        cancelPendingNotifications()
+        // 一般通知在提醒建立時就先排好，前景與背景都交給系統呈現。
         refreshNotificationStatus()
-        requestNotificationPermissionIfNeeded()
+        refreshAlarmPermissionStatus()
 
+        isCatchingUpAfterLaunch = true
         tick()          // 補登 App 沒開著的期間響過的提醒
+        isCatchingUpAfterLaunch = false
+        synchronizePendingNotifications()
+        synchronizeAlarms()
         startTicker()
     }
 
@@ -181,26 +204,46 @@ final class ReminderController {
         due.sort { $0.at < $1.at }
 
         for item in due {
-            let delivered = wasDeliveredByNotification(fireDate: item.at)
-            record(item.schedule, at: item.at, missed: delivered)
-            if !delivered {
-                ring(item.schedule, at: item.at)
+            let wasInBackground = wasDueWhileBackgrounded(fireDate: item.at)
+            record(item.schedule, at: item.at, missed: wasInBackground)
+            if !wasInBackground && !isScheduledSystemAlarm(item.schedule) {
+                // 通知已授權時不再由 Timer 另外播一次。未授權時仍保留前景提示。
+                let systemPlaysSound = !usesAlarmKit(for: item.schedule)
+                    && notificationStatus == .authorized && notificationSoundsEnabled
+                ring(item.schedule, at: item.at, playSound: !systemPlaysSound)
             }
         }
         persistEvents()
+        // 前景也改由系統播放後，消耗一批通知時必須補入後續提醒，
+        // 否則長時間開著 App 會在最初 58 則用完後停止響鈴。
+        synchronizePendingNotifications()
     }
 
-    /// 這一響是不是已經由系統通知送出了？是的話回到前景就不該再響一次。
+    /// 這一響是否發生在 App 不位於前景的期間？是的話回到前景就不補播，
+    /// 但這不代表能確認使用者真的看見或聽見系統提醒。
     ///
-    /// 兩個條件任一成立就算：
-    /// 1. 落後超過兩秒。前景時計時器每秒都會跑，落後這麼多必然是 App 當時不在前景，
-    ///    這也涵蓋了「被系統終止後重新啟動」。
-    /// 2. 響鈴的時刻落在 App 離開前景之後。背景剛開始的幾秒 App 其實還活著
-    ///    （排通知的背景任務把它撐著），那時候響的也是通知在響。
-    private func wasDeliveredByNotification(fireDate: Date) -> Bool {
-        if Date().timeIntervalSince(fireDate) > 2 { return true }
+    /// 冷啟動時，超過兩秒的舊時刻視為 App 未執行期間；一般前景計時器即使因主執行緒
+    /// 暫時繁忙而延遲，也仍會補播。從背景回來時則依 `backgroundedAt` 判斷。
+    private func wasDueWhileBackgrounded(fireDate: Date) -> Bool {
+        if isCatchingUpAfterLaunch, Date().timeIntervalSince(fireDate) > 2 { return true }
+        // 螢幕關掉、控制中心蓋著或來電時，`scenePhase` 只走到 `.inactive`，
+        // `backgroundedAt` 還是空的。這時 App 自己播的鈴聲走的是媒體音量、
+        // 畫面上的閃示也沒人看得到，響鈴必須讓給系統通知，否則兩邊都等於沒響。
+        if !isVisiblyActive { return true }
         guard let backgroundedAt else { return false }
         return fireDate >= backgroundedAt.addingTimeInterval(-0.5)
+    }
+
+    /// App 是否真的在最前面、螢幕也亮著。
+    ///
+    /// 只控制 App 內的視覺提示與未授權時的前景播放，不再取消系統通知。
+    private var isVisiblyActive: Bool {
+        UIApplication.shared.applicationState == .active
+    }
+
+    private func isScheduledSystemAlarm(_ schedule: AlarmSchedule) -> Bool {
+        guard usesAlarmKit(for: schedule), #available(iOS 26.0, *) else { return false }
+        return AlarmKitScheduler.containsAlarm(id: schedule.id)
     }
 
     private func record(_ schedule: AlarmSchedule, at date: Date, missed: Bool) {
@@ -215,11 +258,11 @@ final class ReminderController {
         }
     }
 
-    private func ring(_ schedule: AlarmSchedule, at date: Date) {
-        if let option = SoundCatalog.resolved(id: schedule.soundID) {
+    private func ring(_ schedule: AlarmSchedule, at date: Date, playSound: Bool) {
+        if playSound, let option = SoundCatalog.resolved(id: schedule.soundID) {
             SoundPlayer.shared.play(option, times: schedule.chimeCount)
         }
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        if playSound { UINotificationFeedbackGenerator().notificationOccurred(.success) }
 
         flash = RingFlash(label: schedule.displayLabel, colorIndex: schedule.colorIndex, at: date)
         flashResetWorkItem?.cancel()
@@ -265,7 +308,9 @@ final class ReminderController {
         new.cycleStart = nil
         schedules.append(new)
         normalizeCycles()
-        requestNotificationPermissionIfNeeded()
+        requestRequiredPermissionIfNeeded(for: new)
+        synchronizePendingNotifications()
+        synchronizeAlarms(forceRescheduleIDs: [new.id])
     }
 
     func update(_ schedule: AlarmSchedule) {
@@ -274,14 +319,22 @@ final class ReminderController {
         updated.cycleStart = nil        // 時刻可能改過了，這一輪重排
         schedules[index] = updated
         normalizeCycles()
+        requestRequiredPermissionIfNeeded(for: updated)
+        synchronizePendingNotifications(forceRescheduleIDs: [updated.id])
+        synchronizeAlarms(forceRescheduleIDs: [updated.id])
     }
 
     func delete(_ schedule: AlarmSchedule) {
         schedules.removeAll { $0.id == schedule.id }
+        synchronizePendingNotifications(forceRescheduleIDs: [schedule.id])
+        synchronizeAlarms(forceRescheduleIDs: [schedule.id])
     }
 
     func delete(atOffsets offsets: IndexSet) {
+        let removedIDs = Set(offsets.map { schedules[$0].id })
         schedules.remove(atOffsets: offsets)
+        synchronizePendingNotifications(forceRescheduleIDs: removedIDs)
+        synchronizeAlarms(forceRescheduleIDs: removedIDs)
     }
 
     func setEnabled(_ enabled: Bool, for schedule: AlarmSchedule) {
@@ -289,6 +342,11 @@ final class ReminderController {
         schedules[index].isEnabled = enabled
         schedules[index].cycleStart = nil
         normalizeCycles()
+        if enabled {
+            requestRequiredPermissionIfNeeded(for: schedules[index])
+        }
+        synchronizePendingNotifications(forceRescheduleIDs: [schedule.id])
+        synchronizeAlarms(forceRescheduleIDs: [schedule.id])
     }
 
     func clearHistory() {
@@ -306,17 +364,10 @@ final class ReminderController {
     private static func loadSchedules() -> [AlarmSchedule] {
         guard let data = UserDefaults.standard.data(forKey: Keys.schedules),
               let decoded = try? JSONDecoder().decode([AlarmSchedule].self, from: data) else {
-            return [defaultSchedule()]
+            // 新安裝不應在使用者尚未操作前，自動啟用或排入任何提醒。
+            return []
         }
         return decoded
-    }
-
-    private static func defaultSchedule() -> AlarmSchedule {
-        var schedule = AlarmSchedule.makeNew()
-        schedule.label = "每 5 分鐘"
-        schedule.interval = 300
-        schedule.repeats = true
-        return schedule
     }
 
     private func persistEvents() {
@@ -337,11 +388,17 @@ final class ReminderController {
     func handleScenePhase(_ phase: ScenePhase) {
         switch phase {
         case .active:
-            cancelPendingNotifications()
             refreshNotificationStatus()
+            refreshAlarmPermissionStatus()
+            synchronizeAlarms()
+            logDeliveredNotifications()
             tick()                      // 補登不在前景時響過的提醒
+            synchronizePendingNotifications()
             backgroundedAt = nil
             startTicker()
+        case .inactive:
+            // 試聽或前景備援播放不應把 duckOthers 音訊工作階段帶進鎖定畫面。
+            SoundPlayer.shared.stopAll()
         case .background:
             backgroundedAt = Date()
             scheduleBackgroundNotifications()
@@ -350,12 +407,62 @@ final class ReminderController {
         }
     }
 
+    /// 回到 App 後讀取系統實際送達時間，包含鎖屏期間，不以倒數推算。
+    private func logDeliveredNotifications() {
+        Task {
+            let delivered = await UNUserNotificationCenter.current().deliveredNotifications()
+            let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Stopwatch", category: "ReminderDelivery")
+            for notification in delivered where notification.request.identifier.hasPrefix(NotificationID.reminder) {
+                guard let timestamp = notification.request.identifier.split(separator: "-").last.flatMap({ Double($0) }) else { continue }
+                let delay = notification.date.timeIntervalSince1970 - timestamp
+                logger.info("System notification delivery delay: \(delay, privacy: .public) seconds")
+            }
+        }
+    }
+
     // MARK: - 本地通知
+
+    /// 在目前系統上，這組提醒是否應由 AlarmKit 送達。
+    func usesAlarmKit(for schedule: AlarmSchedule) -> Bool {
+        guard #available(iOS 26.0, *) else { return false }
+        return schedule.hasAlarmSemantics
+    }
+
+    var hasEnabledNotificationSchedules: Bool {
+        schedules.contains { $0.isEnabled && !usesAlarmKit(for: $0) }
+    }
+
+    var hasEnabledAlarmSchedules: Bool {
+        schedules.contains { $0.isEnabled && usesAlarmKit(for: $0) }
+    }
+
+    private func requestRequiredPermissionIfNeeded(for schedule: AlarmSchedule) {
+        guard schedule.isEnabled else { return }
+        if usesAlarmKit(for: schedule) {
+            requestAlarmPermissionIfNeeded()
+        } else {
+            requestNotificationPermissionIfNeeded()
+        }
+    }
 
     func requestNotificationPermissionIfNeeded() {
         // 不要 .badge：App 從來不設角標，多要一個權限只會讓授權對話框看起來更可疑。
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] _, _ in
-            self?.refreshNotificationStatus()
+            DispatchQueue.main.async {
+                self?.refreshNotificationStatus()
+                self?.synchronizePendingNotifications()
+            }
+        }
+    }
+
+    func requestAlarmPermissionIfNeeded() {
+        guard #available(iOS 26.0, *) else { return }
+        Task {
+            let state = await AlarmKitScheduler.requestAuthorization()
+            alarmPermissionStatus = Self.permissionStatus(from: state)
+            if state == .authorized {
+                synchronizeAlarms()
+            }
         }
     }
 
@@ -363,7 +470,36 @@ final class ReminderController {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             DispatchQueue.main.async { [weak self] in
                 self?.notificationStatus = settings.authorizationStatus
+                // 只有 `.enabled` 才能當成已開啟。尤其暫時授權可能只把通知安靜
+                // 放進通知中心；若用 `!= .disabled`，`.notSupported` 也會被誤判，畫面就會誤報
+                // 一切正常，使用者卻看不到鎖定畫面也聽不到聲音。
+                self?.notificationAlertsEnabled = settings.alertSetting == .enabled
+                self?.notificationSoundsEnabled = settings.soundSetting == .enabled
+                self?.notificationLockScreenEnabled = settings.lockScreenSetting == .enabled
+                self?.notificationTimeSensitiveEnabled = settings.timeSensitiveSetting == .enabled
+                self?.notificationScheduledDeliveryEnabled = settings.scheduledDeliverySetting == .enabled
+                self?.notificationSettingsLoaded = true
             }
+        }
+    }
+
+    func refreshAlarmPermissionStatus() {
+        guard #available(iOS 26.0, *) else {
+            alarmPermissionStatus = .unavailable
+            return
+        }
+        alarmPermissionStatus = Self.permissionStatus(from: AlarmKitScheduler.authorizationState)
+    }
+
+    @available(iOS 26.0, *)
+    private static func permissionStatus(
+        from state: AlarmManager.AuthorizationState
+    ) -> AlarmPermissionStatus {
+        switch state {
+        case .notDetermined: .notDetermined
+        case .denied: .denied
+        case .authorized: .authorized
+        @unknown default: .denied
         }
     }
 
@@ -382,46 +518,118 @@ final class ReminderController {
         backgroundTask = .invalid
     }
 
-    /// 進背景時，把接下來的響鈴時刻排成本地通知（iOS 上限 64 則）。
+    /// 進背景時再次同步一般通知，並用背景任務等系統接收完成。
     private func scheduleBackgroundNotifications() {
         beginBackgroundTask()
-
-        let moment = Date()
-        var upcoming: [(schedule: AlarmSchedule, at: Date)] = []
-        for schedule in schedules where schedule.isEnabled {
-            guard let start = schedule.cycleStart else { continue }
-            for date in schedule.upcomingFireDates(cycleStart: start,
-                                                   after: moment,
-                                                   limit: maxScheduledNotifications) {
-                upcoming.append((schedule, date))
-            }
-        }
-        upcoming.sort { $0.at < $1.at }
-        let batch = Array(upcoming.prefix(maxScheduledNotifications))
-
-        UNUserNotificationCenter.current().replacePending(withPrefix: NotificationID.reminder) {
-            batch.compactMap { item in
-                let delay = item.at.timeIntervalSinceNow
-                guard delay > 0.5 else { return nil }
-
-                let content = UNMutableNotificationContent()
-                content.title = item.schedule.displayLabel
-                content.body = TimeFormat.timeOfDay(item.at)
-                content.interruptionLevel = .timeSensitive
-                content.sound = SoundCatalog.notificationSound(for: item.schedule.soundID)
-
-                return UNNotificationRequest(
-                    identifier: "\(NotificationID.reminder)\(item.schedule.id.uuidString)-\(Int(item.at.timeIntervalSince1970))",
-                    content: content,
-                    trigger: UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)
-                )
-            }
-        } completion: { [weak self] in
+        enqueuePendingNotificationSync(from: schedules) { [weak self] result in
+            self?.recordNotificationSchedulingResult(result)
             self?.endBackgroundTask()
         }
     }
 
-    private func cancelPendingNotifications() {
-        UNUserNotificationCenter.current().removePending(withPrefix: NotificationID.reminder)
+    /// 建立、修改、啟用提醒時就先交給通知中心，不把成功與否押在背景切換瞬間。
+    private func synchronizePendingNotifications(forceRescheduleIDs: Set<UUID> = []) {
+        enqueuePendingNotificationSync(
+            from: schedules,
+            forceRescheduleIDs: forceRescheduleIDs
+        ) { [weak self] result in
+            self?.recordNotificationSchedulingResult(result)
+        }
     }
+
+    private func recordNotificationSchedulingResult(_ result: NotificationSchedulingResult) {
+        notificationSchedulingError = result.errors.first
+    }
+
+    /// AlarmKit 在使用者建立、修改或啟用鬧鐘時就持久同步，不依賴背景切換時機。
+    private func synchronizeAlarms(forceRescheduleIDs: Set<UUID> = []) {
+        guard #available(iOS 26.0, *) else { return }
+        let alarmSchedules = schedules.filter { usesAlarmKit(for: $0) }
+        let previousTask = alarmSchedulingTask
+        alarmSchedulingTask = Task { [weak self] in
+            await previousTask?.value
+            let errors = await AlarmKitScheduler.synchronizeAlarms(
+                with: alarmSchedules,
+                forceRescheduleIDs: forceRescheduleIDs
+            )
+            self?.alarmSchedulingError = errors.first
+        }
+    }
+
+    /// 把接下來的一般提醒排成本地通知（iOS 上限 64 則）。
+    private func enqueuePendingNotificationSync(
+        from sourceSchedules: [AlarmSchedule],
+        forceRescheduleIDs: Set<UUID> = [],
+        completion: @escaping (NotificationSchedulingResult) -> Void
+    ) {
+        let previousTask = notificationSchedulingTask
+        notificationSchedulingTask = Task { [weak self] in
+            await previousTask?.value
+            guard let self else { return }
+            // 音檔產生、通知提交與快取清理必須在同一序列，避免前一批刪除下一批音檔。
+            let moment = Date()
+            var upcoming: [(schedule: AlarmSchedule, at: Date)] = []
+            for schedule in sourceSchedules where schedule.isEnabled && !usesAlarmKit(for: schedule) {
+                guard let start = schedule.cycleStart else { continue }
+                for date in schedule.upcomingFireDates(cycleStart: start,
+                                                       after: moment,
+                                                       limit: maxScheduledNotifications) {
+                    upcoming.append((schedule, date))
+                }
+            }
+            upcoming.sort { $0.at < $1.at }
+            let batch = Array(upcoming.prefix(maxScheduledNotifications))
+            // 這一輪真正被待送通知引用到的連響檔，等排程換完之後用來清掉其餘的舊快取。
+            var referencedSoundNames: Set<String> = []
+            let requests = batch.compactMap { item -> UNNotificationRequest? in
+                let delay = item.at.timeIntervalSinceNow
+                guard delay > 0 else { return nil }
+
+                if let soundName = SoundCatalog.backgroundSoundName(for: item.schedule.soundID,
+                                                                    times: item.schedule.chimeCount) {
+                    referencedSoundNames.insert(soundName)
+                }
+
+                let identifier = "\(NotificationID.reminderPrefix(for: item.schedule.id))\(Int(item.at.timeIntervalSince1970))"
+
+                let content = UNMutableNotificationContent()
+                content.title = item.schedule.displayLabel
+                content.body = TimeFormat.timeOfDayWithSeconds(item.at)
+                content.interruptionLevel = .timeSensitive
+                // 每一響有獨立識別碼；通知分組本身不決定是否播放聲音。
+                content.threadIdentifier = identifier
+                content.sound = SoundCatalog.notificationSound(
+                    for: item.schedule.soundID,
+                    times: item.schedule.chimeCount
+                )
+
+                return UNNotificationRequest(
+                    identifier: identifier,
+                    content: content,
+                    trigger: UNCalendarNotificationTrigger(
+                        dateMatching: Calendar.current.dateComponents(
+                            [.calendar, .timeZone, .year, .month, .day, .hour, .minute, .second],
+                            from: item.at
+                        ),
+                        repeats: false
+                    )
+                )
+            }
+
+            let forceReplacePrefixes = Set(forceRescheduleIDs.map {
+                NotificationID.reminderPrefix(for: $0)
+            })
+            let result = await LocalNotificationScheduler.shared.synchronizePending(
+                withPrefix: NotificationID.reminder,
+                requests: requests,
+                forceReplacePrefixes: forceReplacePrefixes
+            )
+            // 同步失敗時可能仍有舊通知，保留其音檔以供系統讀取。
+            if result.errors.isEmpty {
+                SoundCatalog.pruneRepeatCache(keeping: referencedSoundNames)
+            }
+            completion(result)
+        }
+    }
+
 }

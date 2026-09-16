@@ -34,19 +34,57 @@ struct ScheduleEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // 響完一輪的提醒會自動關閉。少了這個開關，使用者改好時刻按儲存之後
+                // 提醒仍然是關著的，等於怎麼改都不會再響。
+                if !isNew {
+                    Section {
+                        Toggle("啟用這組提醒", isOn: $schedule.isEnabled)
+                    } footer: {
+                        Text(schedule.isEnabled
+                             ? "關閉之後就不會再響。"
+                             : "這組提醒目前是關著的，開啟之後才會依下面的設定響。")
+                    }
+                }
+
                 Section("標籤") {
                     TextField(schedule.defaultLabel, text: $schedule.label)
                 }
 
-                Section("提醒方式") {
+                Section {
                     Picker("方式", selection: $schedule.repeats) {
                         Text("重複").tag(true)
                         Text("單次").tag(false)
                     }
                     .pickerStyle(.segmented)
+                    .onChange(of: schedule.repeats) { _, repeats in
+                        // 間隔循環不是鬧鐘語意，不能保留 AlarmKit 模式。
+                        if repeats { schedule.usesSystemAlarm = false }
+                    }
 
                     if schedule.repeats {
                         presetRow
+                    }
+                } header: {
+                    Text("提醒方式")
+                } footer: {
+                    if #available(iOS 26.0, *) {
+                        Text(schedule.repeats
+                             ? "間隔循環在背景時使用系統通知，不保證突破靜音或專注模式。"
+                             : "單次預設為一般提醒，播完指定連響次數後會自動結束。")
+                    } else {
+                        Text("背景與鎖定螢幕時由系統通知送達。")
+                    }
+                }
+
+                if #available(iOS 26.0, *), !schedule.repeats {
+                    Section {
+                        Toggle("持續響鈴直到停止", isOn: $schedule.usesSystemAlarm)
+                    } header: {
+                        Text("系統鬧鐘")
+                    } footer: {
+                        Text(schedule.usesSystemAlarm
+                             ? "會突破靜音與專注模式，並持續響鈴，直到你在系統鬧鐘上按下停止。"
+                             : "關閉時會依連響次數播放後自動結束，但不保證突破靜音或專注模式。")
                     }
                 }
 
@@ -55,7 +93,7 @@ struct ScheduleEditorView: View {
                 } header: {
                     Text("第一次響鈴")
                 } footer: {
-                    Text("時鐘走到 \(TimeFormat.timeOfDay(firstTime)) 時響第一次。")
+                    Text(firstFireFooter)
                 }
 
                 if schedule.repeats {
@@ -104,11 +142,22 @@ struct ScheduleEditorView: View {
                         }
                     }
 
-                    Stepper("連響次數：\(schedule.chimeCount)", value: $schedule.chimeCount, in: 1...5)
+                    if schedule.hasAlarmSemantics {
+                        Text("系統鬧鐘會持續響到手動停止，不使用連響次數。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Stepper("連響次數：\(schedule.chimeCount)",
+                                value: $schedule.chimeCount,
+                                in: 1...5)
+                    }
 
                     Button {
                         if let option = SoundCatalog.resolved(id: schedule.soundID) {
-                            SoundPlayer.shared.play(option, times: schedule.chimeCount)
+                            SoundPlayer.shared.play(
+                                option,
+                                times: schedule.hasAlarmSemantics ? 1 : schedule.chimeCount
+                            )
                         }
                     } label: {
                         Label("試聽", systemImage: "play.circle")
@@ -154,6 +203,19 @@ struct ScheduleEditorView: View {
 
     private var isValid: Bool {
         !(schedule.repeats && schedule.interval < 1)
+    }
+
+    /// 設定的時刻若今天已經過了，這一輪會排到明天 —— 要寫出來，
+    /// 否則使用者只看到一個早就過去的時刻，會以為提醒壞了。
+    private var firstFireFooter: String {
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: firstTime)
+        var probe = AlarmSchedule()
+        probe.firstHour = parts.hour ?? 0
+        probe.firstMinute = parts.minute ?? 0
+        guard let next = probe.firstFireDate(onOrAfter: Date()) else {
+            return "時鐘走到 \(TimeFormat.timeOfDay(firstTime)) 時響第一次。"
+        }
+        return "時鐘走到 \(TimeFormat.dayQualified(next)) 時響第一次。"
     }
 
     private var dailyFooter: String {

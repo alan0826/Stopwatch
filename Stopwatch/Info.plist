@@ -2,9 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleDisplayName</key>
-	<string>循環提醒</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
+	<key>CFBundleGetInfoString</key>
+	<string></string>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>讓你建立的單次或每日鬧鐘在指定時間響鈴，包括靜音或專注模式下。</string>
 </dict>
 </plist>

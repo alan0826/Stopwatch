@@ -1,0 +1,29 @@
+Hello App Review Team,
+
+Thank you for the notice. We take Guideline 5.6 seriously and audited both the submitted build and the source code for any hidden, dormant, or review-dependent behavior.
+
+Build 1 did not contain remote configuration, server-delivered code, WebViews, third-party SDKs, account or payment features, device/region/date/reviewer checks, or alternate interfaces. Its only functionality was a local cyclic reminder utility.
+
+We did identify one behavior that could have appeared unexpected: on a fresh installation, build 1 automatically created an enabled example reminder and requested notification permission at launch. Although the example reminder was visible on the main screen, we understand that this could make the resulting notifications appear unsolicited.
+
+Build 2 removes that behavior:
+- A fresh installation starts with no reminders.
+- The app does not request notification permission at launch.
+- Only reminders explicitly created and enabled by the user can be scheduled.
+- The relevant iOS permission is requested only after the user explicitly creates or enables a reminder. If permission still needs attention, the app shows a visible “Enable Background Reminders” banner.
+
+All features in build 2 are available to every user and reviewer through the visible interface. There is no login, demo account, subscription, in-app purchase, advertising, analytics, or network access.
+
+Review steps:
+1. Launch the app. The reminder list is empty and no permission prompt appears.
+2. Tap the + button or “Add Reminder.”
+3. Choose one-time or repeating, the first alert time, interval/end time where applicable, daily repeat, sound, repeat count, and color; then tap Save.
+4. Allow the contextual system permission request. If permission was previously dismissed or denied, use the visible “Enable Background Reminders” banner or the Settings link.
+5. Tap a reminder row to edit it, use its switch to enable/disable it, swipe left to delete, or swipe right to preview its sound.
+6. Delivered reminders appear in the visible reminder history on the main screen.
+
+Notifications are local only. Time Sensitive delivery is used solely for reminders the user explicitly schedules, so they can arrive at the chosen time; users can disable this in iOS Settings. The app stores schedules and history locally in UserDefaults and sends no data to a server.
+
+If a specific screen, action, or binary indicator led to the Guideline 5.6 finding, please identify it so we can address it precisely. We are happy to provide a screen recording of the complete app flow.
+
+Thank you.

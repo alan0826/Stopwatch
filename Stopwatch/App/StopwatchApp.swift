@@ -4,7 +4,9 @@
 //
 
 import SwiftUI
+import UIKit
 import UserNotifications
+import OSLog
 
 @main
 struct StopwatchApp: App {
@@ -33,10 +35,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return true
     }
 
-    /// 前景時提醒由 App 自己播鈴聲並在畫面上閃提示，不需要再顯示一次通知。
+    /// 已排入系統的通知一律由系統呈現及播放，包括前景送達。
+    /// 不以 applicationState 分流：通知回呼與計時器可能分別位於鎖定切換的兩側，
+    /// 若一邊隱藏通知、另一邊跳過 App 播放，就會漏響。
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([])
+        // 實際送達回呼與預定時間分開記錄，不把 Timer 推算當作已成功響鈴。
+        if let timestamp = notification.request.identifier.split(separator: "-").last.flatMap({ Double($0) }) {
+            let delay = Date().timeIntervalSince1970 - timestamp
+            Logger(subsystem: Bundle.main.bundleIdentifier ?? "Stopwatch", category: "ReminderDelivery")
+                .info("Foreground notification delivery delay: \(delay, privacy: .public) seconds")
+        }
+        completionHandler([.banner, .list, .sound])
     }
 }
