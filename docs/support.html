@@ -132,12 +132,17 @@
 
       <div class="faq-item">
         <p class="faq-q">App 切到背景後，提醒還會響嗎？</p>
-        <p class="faq-a">會。App 進入背景或鎖定螢幕時，會把接下來的響鈴改由系統本地通知送出。請確認已在系統設定中允許本 App 傳送通知。</p>
+        <p class="faq-a">有限連響與間隔提醒由系統本地通知送出；請在建立提醒後，點主畫面的權限說明並允許通知。iOS 26 或更新版本也可在單次提醒中選用 AlarmKit，持續響到手動停止。</p>
       </div>
 
       <div class="faq-item">
         <p class="faq-q">開啟專注模式（勿擾模式）時提醒會被消音嗎？</p>
-        <p class="faq-a">不會。本 App 使用「時效性通知」，預設能突破專注模式與勿擾模式送達。若你在系統設定中個別關閉了此權限，則不在此限。</p>
+        <p class="faq-a">一般提醒使用「時效性通知」，是否能突破專注模式取決於你的 iOS 設定。iOS 26 的 AlarmKit 系統鬧鐘可突破靜音與專注模式，但只會用於你明確開啟「持續響鈴直到停止」的單次提醒。</p>
+      </div>
+
+      <div class="faq-item">
+        <p class="faq-q">為什麼看得到「持續響鈴直到停止」但不能開啟？</p>
+        <p class="faq-a">這項功能使用 Apple AlarmKit，需要 iOS 26 或更新版本。iOS 18～25 仍可使用一般本地通知提醒。</p>
       </div>
 
       <div class="faq-item">

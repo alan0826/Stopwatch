@@ -1,11 +1,34 @@
-This app is a fully local cyclic reminder utility. It has no account, demo credentials, server, remote configuration, WebView, third-party SDK, advertising, analytics, payment, or hidden/dormant functionality.
+BUILD 1.0 (3) — COMPLETE FEATURE LIST AND REVIEW PATH
 
-Complete review path:
-1. Launch: no reminders exist and no permission prompt appears.
-2. Tap + or “Add Reminder.”
-3. Configure and save the reminder.
-4. Saving the first enabled reminder requests only the system permission required for that reminder, in context. On iOS 26 or later, AlarmKit authorization is requested only if the reviewer explicitly enables "Ring Continuously Until Stopped" on a one-time or daily fixed-time reminder. All finite-chime and interval-based reminders request notification authorization. On iOS 18, all reminders use local notifications.
-5. Edit by tapping a row; enable/disable with the switch; swipe left to delete; swipe right to preview the selected bundled sound.
-6. Delivery history is shown on the main screen.
+This is a fully local reminder utility. It has no account, server, remote configuration, downloaded code, WebView, third-party SDK, advertising, analytics, or purchases. The interface is in Traditional Chinese; exact on-screen labels are quoted below with an English translation.
 
-On iOS 26 or later, AlarmKit is used only when the user explicitly opts into a system alarm that rings continuously until manually stopped. Finite-chime one-time/daily reminders and interval-based cyclic reminders continue to use local notifications with Time Sensitive delivery and do not masquerade as alarms. On iOS 18, all background delivery uses local notifications. In-app sound previews use media volume. Schedules, settings, and history remain on device in UserDefaults. No data leaves the device.
+Every feature is listed in the app: tap the ⓘ button (top left of the main screen) to open “關於循環提醒” (About Cyclic Reminder). It lists all features, the OS requirements, and the version/build.
+
+STANDARD PATH (any supported iOS version)
+
+1. Launch. The list is empty and no permission prompt appears.
+2. Tap + (top right) or “新增提醒” (Add Reminder).
+3. Keep “重複” (Repeat) selected, pick an interval such as “每 1 分” (every 1 min), and set “第一次響鈴” (First Alert) to a time 1–2 minutes ahead. Tap “儲存” (Save).
+4. The reminder appears on the main screen, together with an orange card “開啟背景提醒” (Enable Background Reminders). Tap the card, then allow notifications.
+5. Lock the device. The reminder is delivered as a local notification at each scheduled time. Delivered reminders appear under “提醒紀錄” (Reminder History) on the main screen.
+
+SYSTEM ALARM PATH (iPhone with iOS 26 or later)
+
+1. Tap +, then choose “單次” (One Time).
+2. Turn on “持續響鈴直到停止” (Ring Continuously Until Stopped) in the “系統鬧鐘” (System Alarm) section. Set the time 1–2 minutes ahead and tap “儲存” (Save).
+3. On the main screen, tap the orange card “開啟系統鬧鐘” (Enable System Alarm), then allow alarms.
+4. Lock the device and wait. AlarmKit presents the alarm on the Lock Screen (and in the Dynamic Island on supported iPhones). Tap “停止” (Stop) to stop it.
+
+The same option can be combined with “每天重複” (Repeat Daily) in the editor; AlarmKit then rings at that time every day. The permission prompt and the orange card describe this as “單次提醒（可搭配每天重複）” (one-time reminder, optionally repeating daily). There is no separate daily-alarm feature.
+
+On iOS 18–25, the “持續響鈴直到停止” switch is still shown but disabled, with a note that it requires iOS 26. Those reminders are delivered with local notifications.
+
+The Widget Extension in the bundle only renders the AlarmKit alarm on the Lock Screen / Dynamic Island. It provides no Home Screen widget.
+
+OTHER INTERACTIONS
+
+- Tap a reminder to edit it; use its switch to turn it on or off.
+- Swipe left on a reminder to delete it; swipe right to preview its sound (“試聽”).
+- Notification and alarm permissions can be changed in the iOS Settings app.
+
+All schedules, sound choices, and history are stored locally in UserDefaults. No data leaves the device. No login or demo account is required.

@@ -10,6 +10,7 @@ struct RootView: View {
 
     @State private var editingSchedule: AlarmSchedule?
     @State private var draftSchedule: AlarmSchedule?
+    @State private var showingAppInfo = false
 
     var body: some View {
         NavigationStack {
@@ -38,6 +39,14 @@ struct RootView: View {
             .navigationTitle("循環提醒")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingAppInfo = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                    }
+                    .accessibilityLabel("關於與功能說明")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         draftSchedule = AlarmSchedule.makeNew()
@@ -60,6 +69,9 @@ struct RootView: View {
                 ScheduleEditorView(schedule: schedule, isNew: true) { created in
                     controller.addSchedule(created)
                 }
+            }
+            .sheet(isPresented: $showingAppInfo) {
+                AppInfoView()
             }
             .overlay(alignment: .top) {
                 flashBanner

@@ -1,29 +1,30 @@
 Hello App Review Team,
 
-Thank you for the notice. We take Guideline 5.6 seriously and audited both the submitted build and the source code for any hidden, dormant, or review-dependent behavior.
+Thank you for your patience. We re-examined every build and every piece of metadata we submitted, and we found the inconsistency that most likely made the app appear to hide features.
 
-Build 1 did not contain remote configuration, server-delivered code, WebViews, third-party SDKs, account or payment features, device/region/date/reviewer checks, or alternate interfaces. Its only functionality was a local cyclic reminder utility.
+WHAT HAPPENED
 
-We did identify one behavior that could have appeared unexpected: on a fresh installation, build 1 automatically created an enabled example reminder and requested notification permission at launch. Although the example reminder was visible on the main screen, we understand that this could make the resulting notifications appear unsolicited.
+- Build 1 (uploaded August 4) contained only local-notification reminders. It did not contain AlarmKit, a Widget Extension, or any Lock Screen alarm.
+- While Build 1 was in review, our App Store Connect metadata (Review Notes, description/promotional text, and screenshots) already described or showed a system alarm feature: “持續響鈴直到停止” (Ring Continuously Until Stopped), which uses iOS 26 AlarmKit and shows a Stop button on the Lock Screen / Dynamic Island. That feature was still in development and was not in Build 1.
+- The screen recording we sent on August 14 was captured from Build 1 installed through TestFlight, so it could not show that feature either.
+- Build 2 (uploaded September 17) was the first build that contained AlarmKit.
 
-Build 2 removes that behavior:
-- A fresh installation starts with no reminders.
-- The app does not request notification permission at launch.
-- Only reminders explicitly created and enabled by the user can be scheduled.
-- The relevant iOS permission is requested only after the user explicitly creates or enables a reminder. If permission still needs attention, the app shows a visible “Enable Background Reminders” banner.
+As a result, the metadata described functionality that could not be found in the binary under review. This was our mistake in preparing the submission, not an attempt to hide anything, and we apologize for the confusion it caused.
 
-All features in build 2 are available to every user and reviewer through the visible interface. There is no login, demo account, subscription, in-app purchase, advertising, analytics, or network access.
+WHAT BUILD 3 CONTAINS
 
-Review steps:
-1. Launch the app. The reminder list is empty and no permission prompt appears.
-2. Tap the + button or “Add Reminder.”
-3. Choose one-time or repeating, the first alert time, interval/end time where applicable, daily repeat, sound, repeat count, and color; then tap Save.
-4. Allow the contextual system permission request. If permission was previously dismissed or denied, use the visible “Enable Background Reminders” banner or the Settings link.
-5. Tap a reminder row to edit it, use its switch to enable/disable it, swipe left to delete, or swipe right to preview its sound.
-6. Delivered reminders appear in the visible reminder history on the main screen.
+Build 3, version 1.0 (3), contains exactly the features described in the metadata, and every feature is reachable from the main screen:
 
-Notifications are local only. Time Sensitive delivery is used solely for reminders the user explicitly schedules, so they can arrive at the chosen time; users can disable this in iOS Settings. The app stores schedules and history locally in UserDefaults and sends no data to a server.
+1. Interval and one-time reminders: tap + or “新增提醒” (Add Reminder).
+2. Local notifications for delivery. Notification permission is requested only when the user taps “開啟背景提醒” (Enable Background Reminders) on the main screen after saving a reminder.
+3. On iOS 26 or later: the “持續響鈴直到停止” (Ring Continuously Until Stopped) option for one-time reminders (optionally repeating daily with “每天重複”), which uses AlarmKit. Alarm permission is requested only when the user taps “開啟系統鬧鐘” (Enable System Alarm) on the main screen. The Widget Extension in the bundle only renders this alarm on the Lock Screen / Dynamic Island with a Stop button. On iOS 18–25 the same option is visible but disabled, and labeled as requiring iOS 26.
+4. On-device reminder history on the main screen.
+5. An About screen (the ⓘ button, top left) listing every feature, the OS requirements, and the exact version/build.
 
-If a specific screen, action, or binary indicator led to the Guideline 5.6 finding, please identify it so we can address it precisely. We are happy to provide a screen recording of the complete app flow.
+There is no server, remote configuration, downloaded code, WebView, third-party SDK, account, purchase, advertising, or analytics. The app behaves the same for every user. The only difference between devices is the iOS 26 requirement for AlarmKit, which the interface states.
+
+We have updated the Review Notes, description, promotional text, and screenshots so that they describe Build 3 only. We have attached a new, uninterrupted recording of Build 3 installed from TestFlight on [iPhone model], iOS [full version], recorded on [date].
+
+If anything in Build 3 still appears to be hidden, please tell us which screen or behavior it is so we can address it directly. We would also welcome an App Review call.
 
 Thank you.

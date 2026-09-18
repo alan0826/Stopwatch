@@ -76,15 +76,20 @@ struct ScheduleEditorView: View {
                     }
                 }
 
-                if #available(iOS 26.0, *), !schedule.repeats {
+                if !schedule.repeats {
                     Section {
                         Toggle("持續響鈴直到停止", isOn: $schedule.usesSystemAlarm)
+                            .disabled(!systemAlarmAvailable)
                     } header: {
                         Text("系統鬧鐘")
                     } footer: {
-                        Text(schedule.usesSystemAlarm
-                             ? "會突破靜音與專注模式，並持續響鈴，直到你在系統鬧鐘上按下停止。"
-                             : "關閉時會依連響次數播放後自動結束，但不保證突破靜音或專注模式。")
+                        if systemAlarmAvailable {
+                            Text(schedule.usesSystemAlarm
+                                 ? "使用 iOS 26 的 AlarmKit，會突破靜音與專注模式，並持續響鈴，直到你在鎖定畫面或系統鬧鐘上按下停止。"
+                                 : "關閉時會依連響次數播放後自動結束，但不保證突破靜音或專注模式。")
+                        } else {
+                            Text("「持續響鈴直到停止」需要 iOS 26 或更新版本。目前系統會以一般本地通知送達這組提醒。")
+                        }
                     }
                 }
 
@@ -205,6 +210,11 @@ struct ScheduleEditorView: View {
         !(schedule.repeats && schedule.interval < 1)
     }
 
+    private var systemAlarmAvailable: Bool {
+        if #available(iOS 26.0, *) { return true }
+        return false
+    }
+
     /// 設定的時刻若今天已經過了，這一輪會排到明天 —— 要寫出來，
     /// 否則使用者只看到一個早就過去的時刻，會以為提醒壞了。
     private var firstFireFooter: String {
@@ -284,6 +294,9 @@ struct ScheduleEditorView: View {
         result.firstHour = parts.hour ?? result.firstHour
         result.firstMinute = parts.minute ?? result.firstMinute
         result.interval = max(result.interval, 1)
+        if !systemAlarmAvailable {
+            result.usesSystemAlarm = false
+        }
         if result.hasEnd {
             result.endAt = max(result.endAt, result.interval)
         }

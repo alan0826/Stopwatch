@@ -1,5 +1,5 @@
 //
-//  StopwatchApp.swift
+//  CyclicReminderApp.swift
 //  Stopwatch
 //
 
@@ -9,7 +9,7 @@ import UserNotifications
 import OSLog
 
 @main
-struct StopwatchApp: App {
+struct CyclicReminderApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
 
@@ -44,7 +44,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // 實際送達回呼與預定時間分開記錄，不把 Timer 推算當作已成功響鈴。
         if let timestamp = notification.request.identifier.split(separator: "-").last.flatMap({ Double($0) }) {
             let delay = Date().timeIntervalSince1970 - timestamp
-            Logger(subsystem: Bundle.main.bundleIdentifier ?? "Stopwatch", category: "ReminderDelivery")
+            Logger(subsystem: Bundle.main.bundleIdentifier ?? "cyclicreminder", category: "ReminderDelivery")
                 .info("Foreground notification delivery delay: \(delay, privacy: .public) seconds")
         }
         completionHandler([.banner, .list, .sound])

@@ -308,7 +308,8 @@ final class ReminderController {
         new.cycleStart = nil
         schedules.append(new)
         normalizeCycles()
-        requestRequiredPermissionIfNeeded(for: new)
+        // 儲存提醒不應同時跳出系統權限視窗。先讓提醒確實出現在主畫面，
+        // 再由可見的權限說明卡讓使用者主動選擇是否授權。
         synchronizePendingNotifications()
         synchronizeAlarms(forceRescheduleIDs: [new.id])
     }
@@ -319,7 +320,6 @@ final class ReminderController {
         updated.cycleStart = nil        // 時刻可能改過了，這一輪重排
         schedules[index] = updated
         normalizeCycles()
-        requestRequiredPermissionIfNeeded(for: updated)
         synchronizePendingNotifications(forceRescheduleIDs: [updated.id])
         synchronizeAlarms(forceRescheduleIDs: [updated.id])
     }
@@ -342,9 +342,6 @@ final class ReminderController {
         schedules[index].isEnabled = enabled
         schedules[index].cycleStart = nil
         normalizeCycles()
-        if enabled {
-            requestRequiredPermissionIfNeeded(for: schedules[index])
-        }
         synchronizePendingNotifications(forceRescheduleIDs: [schedule.id])
         synchronizeAlarms(forceRescheduleIDs: [schedule.id])
     }
@@ -411,7 +408,7 @@ final class ReminderController {
     private func logDeliveredNotifications() {
         Task {
             let delivered = await UNUserNotificationCenter.current().deliveredNotifications()
-            let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Stopwatch", category: "ReminderDelivery")
+            let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cyclicreminder", category: "ReminderDelivery")
             for notification in delivered where notification.request.identifier.hasPrefix(NotificationID.reminder) {
                 guard let timestamp = notification.request.identifier.split(separator: "-").last.flatMap({ Double($0) }) else { continue }
                 let delay = notification.date.timeIntervalSince1970 - timestamp
@@ -434,15 +431,6 @@ final class ReminderController {
 
     var hasEnabledAlarmSchedules: Bool {
         schedules.contains { $0.isEnabled && usesAlarmKit(for: $0) }
-    }
-
-    private func requestRequiredPermissionIfNeeded(for schedule: AlarmSchedule) {
-        guard schedule.isEnabled else { return }
-        if usesAlarmKit(for: schedule) {
-            requestAlarmPermissionIfNeeded()
-        } else {
-            requestNotificationPermissionIfNeeded()
-        }
     }
 
     func requestNotificationPermissionIfNeeded() {

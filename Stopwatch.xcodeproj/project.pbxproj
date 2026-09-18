@@ -54,12 +54,6 @@
 			);
 			target = AA1000000000000000000020 /* ReminderWidgetExtension */;
 		};
-		AA1000000000000000000013 /* Exceptions for "Shared" folder in "Stopwatch" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-			);
-			target = 15D6E252301E4EF100815D94 /* Stopwatch */;
-		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -81,9 +75,6 @@
 		};
 		AA1000000000000000000012 /* Shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				AA1000000000000000000013 /* Exceptions for "Shared" folder in "Stopwatch" target */,
-			);
 			path = Shared;
 			sourceTree = "<group>";
 		};
@@ -266,7 +257,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Stopwatch/Stopwatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 8N3KA28FWD;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Stopwatch/Info.plist;
@@ -301,7 +292,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Stopwatch/Stopwatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 8N3KA28FWD;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Stopwatch/Info.plist;
@@ -454,7 +445,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 8N3KA28FWD;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ReminderWidget/Info.plist;
@@ -483,7 +474,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 8N3KA28FWD;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ReminderWidget/Info.plist;

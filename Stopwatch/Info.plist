@@ -4,7 +4,9 @@
 <dict>
 	<key>CFBundleGetInfoString</key>
 	<string></string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>NSAlarmKitUsageDescription</key>
-	<string>讓你建立的單次或每日鬧鐘在指定時間響鈴，包括靜音或專注模式下。</string>
+	<string>讓你開啟「持續響鈴直到停止」的單次提醒（可搭配每天重複）在指定時刻響鈴，包括靜音或專注模式下。</string>
 </dict>
 </plist>

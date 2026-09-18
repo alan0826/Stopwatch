@@ -79,7 +79,7 @@ struct NotificationPermissionBanner: View {
                         permissionButton(
                             icon: "alarm.fill",
                             title: "開啟系統鬧鐘",
-                            message: "單次或每日鬧鐘可在需要時突破靜音與專注模式。",
+                            message: "開啟「持續響鈴直到停止」的單次提醒（可搭配每天重複）可突破靜音與專注模式。",
                             hint: "顯示 iOS 鬧鐘權限提示"
                         ) {
                             controller.requestAlarmPermissionIfNeeded()
@@ -88,7 +88,7 @@ struct NotificationPermissionBanner: View {
                         settingsButton(
                             icon: "alarm.waves.left.and.right.slash",
                             title: "系統鬧鐘已關閉",
-                            message: "單次與每日鬧鐘無法在背景送達。點一下前往設定開啟。",
+                            message: "開啟「持續響鈴直到停止」的單次提醒（可搭配每天重複）無法在背景送達。點一下前往設定開啟。",
                             hint: "開啟「設定」以允許系統鬧鐘"
                         )
                     case .unavailable, .authorized:
