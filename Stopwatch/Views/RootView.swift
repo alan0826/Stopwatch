@@ -49,7 +49,7 @@ struct RootView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        draftSchedule = AlarmSchedule.makeNew()
+                        draftSchedule = newDraft()
                     } label: {
                         Image(systemName: "plus")
                     }
@@ -164,6 +164,11 @@ struct RootView: View {
         }
     }
 
+    /// 新增頁的草稿。顏色先配好，新增頁一打開就圈在這組排程實際會用的顏色上。
+    private func newDraft() -> AlarmSchedule {
+        AlarmSchedule.makeNew(colorIndex: Palette.nextIndex(after: controller.schedules))
+    }
+
     /// 刪除排程。刪到一組都不剩的那一刀不做動畫。
     ///
     /// 與 List 上那個 `.id` 是一組的：`.id` 負責讓版面一次重建，這裡負責讓那次重建
@@ -190,7 +195,7 @@ struct RootView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("新增提醒") { draftSchedule = AlarmSchedule.makeNew() }
+            Button("新增提醒") { draftSchedule = newDraft() }
                 .buttonStyle(.borderedProminent)
                 .padding(.top, 4)
         }

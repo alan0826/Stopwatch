@@ -107,7 +107,18 @@ enum Palette {
     ]
 
     static func color(at index: Int) -> Color {
+        colors[wrapped(index)]
+    }
+
+    /// 把索引折回色盤範圍內。舊版依排程數量配色，存下來的索引可能大於色盤長度。
+    static func wrapped(_ index: Int) -> Int {
         let count = colors.count
-        return colors[((index % count) + count) % count]
+        return ((index % count) + count) % count
+    }
+
+    /// 新排程的預設顏色：先挑還沒被用過的，八色都用過了才依數量輪下去。
+    static func nextIndex(after schedules: [AlarmSchedule]) -> Int {
+        let used = Set(schedules.map { wrapped($0.colorIndex) })
+        return colors.indices.first { !used.contains($0) } ?? wrapped(schedules.count)
     }
 }

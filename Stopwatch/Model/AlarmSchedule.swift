@@ -77,8 +77,9 @@ struct AlarmSchedule: Identifiable, Codable, Hashable {
     ///
     /// 至少留 2 分鐘的餘裕 —— 預設值若只差幾十秒，使用者還在設定的時候那個時刻就過了，
     /// 存檔之後會被安靜地排到隔天。
-    static func makeNew(after now: Date = Date()) -> AlarmSchedule {
+    static func makeNew(colorIndex: Int = 0, after now: Date = Date()) -> AlarmSchedule {
         var schedule = AlarmSchedule()
+        schedule.colorIndex = colorIndex
         let calendar = Calendar.current
         let lead = now.addingTimeInterval(120)
         let minute = calendar.component(.minute, from: lead)

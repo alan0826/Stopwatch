@@ -303,8 +303,9 @@ final class ReminderController {
     // MARK: - 排程管理
 
     func addSchedule(_ schedule: AlarmSchedule) {
+        // 顏色在開新增頁時就配好了（見 `Palette.nextIndex`），這裡不能再蓋掉，
+        // 否則使用者在新增頁挑的顏色會被無視。
         var new = schedule
-        new.colorIndex = schedules.count
         new.cycleStart = nil
         schedules.append(new)
         normalizeCycles()

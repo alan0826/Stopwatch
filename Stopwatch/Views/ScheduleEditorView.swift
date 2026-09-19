@@ -283,7 +283,7 @@ struct ScheduleEditorView: View {
                     .frame(width: 26, height: 26)
                     .overlay(
                         Circle()
-                            .stroke(Color.primary, lineWidth: schedule.colorIndex == index ? 2 : 0)
+                            .stroke(Color.primary, lineWidth: Palette.wrapped(schedule.colorIndex) == index ? 2 : 0)
                     )
                     .onTapGesture { schedule.colorIndex = index }
             }
