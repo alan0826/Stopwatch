@@ -64,11 +64,13 @@ struct RootView: View {
                         controller.delete(schedule)
                     }
                 }
+                .equatable()
             }
             .sheet(item: $draftSchedule) { schedule in
                 ScheduleEditorView(schedule: schedule, isNew: true) { created in
                     controller.addSchedule(created)
                 }
+                .equatable()
             }
             .sheet(isPresented: $showingAppInfo) {
                 AppInfoView()

@@ -11,6 +11,8 @@ struct ScheduleEditorView: View {
     @State private var schedule: AlarmSchedule
     /// `DatePicker` 要的是 `Date`，存的則是時／分兩個數字。
     @State private var firstTime: Date
+    /// 開啟時帶進來的那一份，只拿來比對是不是同一個編輯頁，見檔尾的 `Equatable`。
+    private let original: AlarmSchedule
     private let isNew: Bool
     private let onSave: (AlarmSchedule) -> Void
     private let onDelete: (() -> Void)?
@@ -26,6 +28,7 @@ struct ScheduleEditorView: View {
         _firstTime = State(initialValue: Calendar.current.date(
             from: DateComponents(year: 2001, month: 1, day: 1,
                                  hour: schedule.firstHour, minute: schedule.firstMinute)) ?? Date())
+        self.original = schedule
         self.isNew = isNew
         self.onSave = onSave
         self.onDelete = onDelete
@@ -301,5 +304,16 @@ struct ScheduleEditorView: View {
             result.endAt = max(result.endAt, result.interval)
         }
         return result
+    }
+}
+
+/// 主畫面的時鐘每秒走一格，開著的編輯頁也跟著每秒重算一次。重算剛好碰上注音組字
+/// 還沒選字的時候，標籤欄位已經打的注音會被直接送出成文字，變成「ㄐ」加上一段新的組字。
+///
+/// 兩個閉包沒辦法比對，SwiftUI 只好每次都當成新的畫面。這裡明講：帶進來的是同一份
+/// 排程就算同一個編輯頁，呼叫端再加上 `.equatable()`，時鐘的更新就不會傳進來。
+extension ScheduleEditorView: Equatable {
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.original == rhs.original && lhs.isNew == rhs.isNew
     }
 }
